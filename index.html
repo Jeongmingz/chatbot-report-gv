@@ -631,7 +631,27 @@ function renderReport(data) {
   destroyCharts();
   uploadSection.style.display = 'none';
   reportSection.style.display = 'block';
-  data.length === 1 ? renderSingle(data[0]) : renderMulti(data);
+
+  const normalized = data.map(d => ({
+    ...d,
+    _brandKey: d.brand_name || d.brand || '-',
+    _dateKey: d.report_date || '-'
+  }));
+
+  const brands = [...new Set(normalized.map(d => d._brandKey))];
+  const dates = [...new Set(normalized.map(d => d._dateKey))];
+
+  if (normalized.length === 1) {
+    renderSingle(normalized[0]);
+    return;
+  }
+
+  if (brands.length === 1 && dates.length > 1) {
+    renderTrend(normalized);
+    return;
+  }
+
+  renderMulti(normalized);
 }
 
 function actionButtons(extraClass) {
@@ -776,6 +796,267 @@ function renderSingle(d) {
     }));
   }
 }
+
+
+function renderTrend(data) {
+  const sorted = [...data].sort((a, b) => new Date(a.report_date || 0) - new Date(b.report_date || 0));
+  const trendData = sorted.slice(-7);
+  const latest = trendData[trendData.length - 1];
+
+  const brandName = latest.brand_name || latest.brand || '-';
+  const dateStart = trendData[0]?.report_date || '-';
+  const dateEnd = latest.report_date || '-';
+  const dateLabel = dateStart === dateEnd ? fmtDate(dateEnd) : fmtDate(dateStart) + ' ~ ' + fmtDate(dateEnd);
+
+  const totalLatest = Number(latest.total_count) || 0;
+  const matchedLatest = Number(latest.matched_count) || 0;
+  const unmatchedLatest = Number(latest.unmatched_count) || 0;
+  const usersLatest = Number(latest.unique_user_count) || 0;
+  const avgScoreLatest = parseFloat(latest.avg_score) || 0;
+  const matchRateLatest = parseFloat(latest.match_rate) || (totalLatest ? matchedLatest / totalLatest * 100 : 0);
+
+  const labels = trendData.map(d => {
+    if (!d.report_date) return '-';
+    const parts = String(d.report_date).split('-');
+    return parts.length === 3 ? `${Number(parts[1])}/${Number(parts[2])}` : d.report_date;
+  });
+
+  const matchRates = trendData.map(d => {
+    const total = Number(d.total_count) || 0;
+    const matched = Number(d.matched_count) || 0;
+    return parseFloat((parseFloat(d.match_rate) || (total ? matched / total * 100 : 0)).toFixed(1));
+  });
+
+  const totalCounts = trendData.map(d => Number(d.total_count) || 0);
+  const matchedCounts = trendData.map(d => Number(d.matched_count) || 0);
+  const unmatchedCounts = trendData.map(d => Number(d.unmatched_count) || 0);
+  const userCounts = trendData.map(d => Number(d.unique_user_count) || 0);
+
+  const prev = trendData.length > 1 ? trendData[trendData.length - 2] : null;
+  const prevTotal = prev ? Number(prev.total_count) || 0 : 0;
+  const prevMatched = prev ? Number(prev.matched_count) || 0 : 0;
+  const prevRate = prev ? parseFloat(prev.match_rate) || (prevTotal ? prevMatched / prevTotal * 100 : 0) : matchRateLatest;
+  const rateDiff = matchRateLatest - prevRate;
+  const totalDiff = totalLatest - prevTotal;
+  const rateDiffText = `${rateDiff >= 0 ? '+' : ''}${rateDiff.toFixed(1)}%p`;
+  const totalDiffText = `${totalDiff >= 0 ? '+' : ''}${totalDiff.toLocaleString()}건`;
+  const perUser = usersLatest ? (totalLatest / usersLatest).toFixed(1) : '-';
+
+  const rowsHtml = trendData.map(d => {
+    const total = Number(d.total_count) || 0;
+    const matched = Number(d.matched_count) || 0;
+    const unmatched = Number(d.unmatched_count) || 0;
+    const users = Number(d.unique_user_count) || 0;
+    const rate = parseFloat(d.match_rate) || (total ? matched / total * 100 : 0);
+    const rc = rateStyle(rate);
+
+    return `
+      <div class="brand-card">
+        <div class="brand-card-header">
+          <span class="brand-name-badge">📅 ${fmtDate(d.report_date)}</span>
+          <span class="rate-chip" style="background:${rc.bg};color:${rc.color};">${rate.toFixed(1)}%</span>
+        </div>
+        <div class="brand-metrics">
+          <div class="bm-item"><div class="bm-label">총 대화</div><div class="bm-val">${total.toLocaleString()}건</div></div>
+          <div class="bm-item"><div class="bm-label">매칭 성공</div><div class="bm-val blue">${matched.toLocaleString()}건</div></div>
+          <div class="bm-item"><div class="bm-label">매칭 실패</div><div class="bm-val red">${unmatched.toLocaleString()}건</div></div>
+          <div class="bm-item"><div class="bm-label">응대객수</div><div class="bm-val">${users.toLocaleString()}명</div></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  reportSection.innerHTML = `
+    <div id="pdfContent">
+      <div class="report-header">
+        <div>
+          <div class="report-title">카카오 챗봇 트렌드 리포트</div>
+          <div class="report-date">📅 ${dateLabel} · 최근 ${trendData.length}일</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+          <span class="brand-badge">📈 ${brandName}</span>
+          ${latest.brand && latest.brand !== brandName ? `<span style="font-size:11px;color:var(--text3);">코드: ${latest.brand}</span>` : ''}
+          ${actionButtons()}
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">💬 최신 대화 수</div>
+          <div class="metric-value">${totalLatest.toLocaleString()}<span class="metric-unit">건</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">✅ 최신 매칭률</div>
+          <div class="metric-value blue">${matchRateLatest.toFixed(1)}<span class="metric-unit">%</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">📊 전일 대비</div>
+          <div class="metric-value ${rateDiff < 0 ? 'red' : 'blue'}">${rateDiffText}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">🎧 최신 응대객수</div>
+          <div class="metric-value">${usersLatest.toLocaleString()}<span class="metric-unit">명</span></div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-card-title">📈 날짜별 매칭률 추이</div>
+          <div style="position:relative;width:100%;height:260px;">
+            <canvas id="trendRateChart" role="img" aria-label="날짜별 매칭률 추이">날짜별 매칭률 추이</canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">💬 날짜별 대화량</div>
+          <div style="position:relative;width:100%;height:260px;">
+            <canvas id="trendVolumeChart" role="img" aria-label="날짜별 대화량">날짜별 대화량</canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-card-title">🎧 응대객수 추이</div>
+          <div style="position:relative;width:100%;height:230px;">
+            <canvas id="trendUserChart" role="img" aria-label="날짜별 응대객수 추이">날짜별 응대객수 추이</canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">📌 최신 주요 지표</div>
+          <div class="stat-rows">
+            <div class="stat-row">
+              <span class="stat-label">매칭률</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(matchRateLatest,100)}%;background:#378ADD;"></div></div>
+              <span class="stat-val">${matchRateLatest.toFixed(1)}%</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">미처리율</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(totalLatest ? unmatchedLatest / totalLatest * 100 : 0,100)}%;background:#E24B4A;"></div></div>
+              <span class="stat-val">${(totalLatest ? unmatchedLatest / totalLatest * 100 : 0).toFixed(1)}%</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">응대당 대화</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(parseFloat(perUser) / 20 * 100 || 0,100)}%;background:#EF9F27;"></div></div>
+              <span class="stat-val">${perUser}건</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">평균 점수</span>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(avgScoreLatest / 500 * 100,100)}%;background:#1D9E75;"></div></div>
+              <span class="stat-val">${avgScoreLatest.toFixed(1)}점</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary-strip">
+        <div class="summary-item">
+          <div class="summary-label">최근 ${trendData.length}일 총 대화</div>
+          <div class="summary-val">${totalCounts.reduce((s, v) => s + v, 0).toLocaleString()}건</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">최근 ${trendData.length}일 매칭 성공</div>
+          <div class="summary-val"><span class="accent">${matchedCounts.reduce((s, v) => s + v, 0).toLocaleString()}건</span></div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">대화 수 전일 대비</div>
+          <div class="summary-val">${totalDiffText}</div>
+        </div>
+      </div>
+
+      <div class="insight-box">
+        <div class="insight-icon">💡</div>
+        <div>
+          <div class="insight-title">트렌드 인사이트</div>
+          <div class="insight-text">
+            최신 매칭률은 <strong>${matchRateLatest.toFixed(1)}%</strong>이며 전일 대비 <strong>${rateDiffText}</strong>입니다.
+            최신 대화 수는 <strong>${totalLatest.toLocaleString()}건</strong>으로 전일 대비 <strong>${totalDiffText}</strong>입니다.
+            최근 ${trendData.length}일 흐름을 기준으로 매칭률과 대화량 변화를 함께 확인할 수 있습니다.
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">최근 ${trendData.length}일 상세</div>
+      ${rowsHtml}
+
+      <div class="report-footer">
+        <span class="footer-text">🕐 리포트 기간: ${dateStart || '-'} ~ ${dateEnd || '-'}</span>
+        <span class="footer-text">카카오 챗봇 히스토리 기반 자동 생성</span>
+      </div>
+    </div>
+  `;
+
+  const rateCtx = document.getElementById('trendRateChart');
+  if (rateCtx) {
+    chartInstances.push(new Chart(rateCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '매칭률(%)',
+          data: matchRates,
+          borderColor: '#378ADD',
+          backgroundColor: 'rgba(55,138,221,0.15)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(1) + '%' } } },
+        scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }
+      }
+    }));
+  }
+
+  const volumeCtx = document.getElementById('trendVolumeChart');
+  if (volumeCtx) {
+    chartInstances.push(new Chart(volumeCtx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: '매칭 성공', data: matchedCounts, backgroundColor: '#378ADD', borderRadius: 4 },
+          { label: '매칭 실패', data: unmatchedCounts, backgroundColor: '#B4B2A9', borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.raw.toLocaleString() + '건' } } },
+        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+      }
+    }));
+  }
+
+  const userCtx = document.getElementById('trendUserChart');
+  if (userCtx) {
+    chartInstances.push(new Chart(userCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '응대객수',
+          data: userCounts,
+          borderColor: '#1D9E75',
+          backgroundColor: 'rgba(29,158,117,0.15)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw.toLocaleString() + '명' } } },
+        scales: { y: { beginAtZero: true } }
+      }
+    }));
+  }
+}
+
 
 function renderMulti(data) {
   const totalAll = data.reduce((s, d) => s + (Number(d.total_count)||0), 0);
