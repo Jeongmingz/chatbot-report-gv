@@ -26,7 +26,9 @@ create table if not exists public.faq_history (
 
 drop view if exists public.faq_history_daily_summary;
 drop view if exists public.faq_history_faq_summary;
+drop view if exists public.faq_history_improvement_queue;
 drop view if exists public.faq_history_unmatched_queries;
+drop view if exists public.faq_history_channel_friend_summary;
 
 do $$
 begin
@@ -86,15 +88,63 @@ create index if not exists idx_faq_history_unmatched
 create index if not exists idx_faq_history_query_trgm
   on public.faq_history using gin (query_normalized gin_trgm_ops);
 
+create index if not exists idx_faq_history_is_friend
+  on public.faq_history (((metadata ->> 'isFriend')::boolean))
+  where (metadata ->> 'isFriend') is not null;
+
+create table if not exists public.faq_brand_sessions (
+  user_id text primary key,
+  brand text not null,
+  updated_at timestamp without time zone not null default timezone('Asia/Seoul', now()),
+  expires_at timestamp without time zone
+);
+
+create index if not exists idx_faq_brand_sessions_updated_at
+  on public.faq_brand_sessions (updated_at desc);
+
+create index if not exists idx_faq_brand_sessions_expires_at
+  on public.faq_brand_sessions (expires_at)
+  where expires_at is not null;
+
 alter table public.faq_history enable row level security;
+alter table public.faq_brand_sessions enable row level security;
 
 drop policy if exists "faq_history_insert" on public.faq_history;
+drop policy if exists "faq_brand_sessions_select" on public.faq_brand_sessions;
+drop policy if exists "faq_brand_sessions_insert" on public.faq_brand_sessions;
+drop policy if exists "faq_brand_sessions_update" on public.faq_brand_sessions;
+drop policy if exists "faq_brand_sessions_delete" on public.faq_brand_sessions;
 
 create policy "faq_history_insert"
   on public.faq_history
   for insert
   to anon, authenticated
   with check (true);
+
+create policy "faq_brand_sessions_select"
+  on public.faq_brand_sessions
+  for select
+  to anon, authenticated
+  using (true);
+
+create policy "faq_brand_sessions_insert"
+  on public.faq_brand_sessions
+  for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "faq_brand_sessions_update"
+  on public.faq_brand_sessions
+  for update
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+create policy "faq_brand_sessions_delete"
+  on public.faq_brand_sessions
+  for delete
+  to anon, authenticated
+  using (true);
 
 create or replace view public.faq_history_daily_summary as
 select
@@ -133,17 +183,62 @@ create or replace view public.faq_history_unmatched_queries as
 select
   brand,
   brand_name,
+  coalesce(metadata ->> 'menuId', 'product') as menu_id,
+  metadata ->> 'productFamilyId' as product_family_id,
+  coalesce(nullif(query_normalized, ''), query) as query_key,
+  min(query) as sample_query,
+  count(*) as query_count,
+  count(*) filter (where occurred_at >= timezone('Asia/Seoul', now()) - interval '7 days') as query_count_7d,
+  count(*) filter (where occurred_at >= timezone('Asia/Seoul', now()) - interval '30 days') as query_count_30d,
+  count(distinct user_id) filter (where user_id is not null) as unique_user_count,
+  round(avg(score)::numeric, 2) as avg_score,
+  min(occurred_at) as first_occurred_at,
+  max(occurred_at) as last_occurred_at
+from public.faq_history
+where matched = false
+group by 1, 2, 3, 4, 5;
+
+create or replace view public.faq_history_improvement_queue as
+select
+  brand,
+  brand_name,
+  coalesce(metadata ->> 'menuId', 'product') as menu_id,
+  case when matched then 'low_confidence' else 'unmatched' end as result_type,
   coalesce(nullif(query_normalized, ''), query) as query_key,
   min(query) as sample_query,
   count(*) as query_count,
   count(distinct user_id) filter (where user_id is not null) as unique_user_count,
+  round(avg(score)::numeric, 2) as avg_score,
   max(occurred_at) as last_occurred_at
 from public.faq_history
-where matched = false
+where matched = false or score < 60
+group by 1, 2, 3, 4, 5;
+
+create or replace view public.faq_history_channel_friend_summary as
+select
+  brand,
+  brand_name,
+  case
+    when (metadata ->> 'isFriend') = 'true' then 'friend'
+    when (metadata ->> 'isFriend') = 'false' then 'not_friend'
+    else 'unknown'
+  end as channel_friend_status,
+  count(*) as total_requests,
+  count(distinct user_id) filter (where user_id is not null) as unique_users,
+  count(*) filter (where matched = true) as matched_requests,
+  count(*) filter (where matched = false) as unmatched_requests,
+  round((count(*) filter (where matched = true)::numeric / nullif(count(*), 0) * 100), 1) as match_rate_pct,
+  round(avg(score)::numeric, 2) as avg_score,
+  min(occurred_at) as first_occurred_at,
+  max(occurred_at) as last_occurred_at
+from public.faq_history
 group by 1, 2, 3;
 
 comment on table public.faq_history is
   'FAQ chatbot request history for reporting, FAQ quality analysis, and web dashboards.';
+
+comment on table public.faq_brand_sessions is
+  'Last selected FAQ brand by Kakao user so the unified skill endpoint can continue brand-specific answers.';
 
 comment on view public.faq_history_daily_summary is
   'Daily brand-level chatbot usage and match-rate summary.';
@@ -152,4 +247,10 @@ comment on view public.faq_history_faq_summary is
   'Matched FAQ hit counts for ranking frequently requested topics.';
 
 comment on view public.faq_history_unmatched_queries is
-  'Unmatched normalized queries for FAQ gap analysis.';
+  'Unmatched normalized queries grouped by brand and inferred support menu, with 7-day and 30-day counts.';
+
+comment on view public.faq_history_improvement_queue is
+  'Prioritized FAQ improvement queue combining unmatched and low-confidence customer queries.';
+
+comment on view public.faq_history_channel_friend_summary is
+  'Kakao channel friend status summary for analyzing user engagement, match rates, and conversion potential.';

@@ -10,6 +10,96 @@ export type ReportRow = {
   avg_score?: number;
 };
 
+export type FaqSummaryRow = {
+  brand: string;
+  brand_name: string;
+  category_id: string | null;
+  category_name: string | null;
+  faq_id: string | null;
+  faq_question: string | null;
+  answer_type: string | null;
+  selected_model: string | null;
+  hit_count: number;
+  unique_user_count: number;
+  avg_score: number | null;
+  first_occurred_at: string | null;
+  last_occurred_at: string | null;
+};
+
+export type UnmatchedQueryRow = {
+  brand: string;
+  brand_name: string;
+  menu_id?: string | null;
+  product_family_id?: string | null;
+  query_key: string;
+  sample_query: string;
+  query_count: number;
+  query_count_7d?: number;
+  query_count_30d?: number;
+  unique_user_count: number;
+  avg_score?: number | null;
+  first_occurred_at?: string | null;
+  last_occurred_at: string | null;
+};
+
+export type ImprovementQueueRow = {
+  brand: string;
+  brand_name: string;
+  menu_id: string;
+  result_type: "low_confidence" | "unmatched" | string;
+  query_key: string;
+  sample_query: string;
+  query_count: number;
+  unique_user_count: number;
+  avg_score: number | null;
+  last_occurred_at: string | null;
+};
+
+export type ChannelFriendSummaryRow = {
+  brand: string;
+  brand_name: string;
+  channel_friend_status: "friend" | "not_friend" | "unknown" | string;
+  total_requests: number;
+  unique_users: number;
+  matched_requests: number;
+  unmatched_requests: number;
+  match_rate_pct: number;
+  avg_score: number | null;
+  first_occurred_at: string | null;
+  last_occurred_at: string | null;
+};
+
+export type HistoryMetadata = {
+  kakaoUserType?: string | null;
+  timezone?: string | null;
+  lang?: string | null;
+  isFriend?: boolean | null;
+  menuId?: string | null;
+  productFamilyId?: string | null;
+  confidence?: "high" | "medium" | "low" | "unmatched" | string | null;
+  result?: "matched" | "unmatched" | string | null;
+  queryCorrected?: string;
+  typoCorrections?: Array<{ original: string; corrected: string }>;
+};
+
+export type HistoryRow = {
+  id: number;
+  occurred_at: string;
+  brand: string;
+  brand_name: string;
+  source: string;
+  user_id: string | null;
+  query: string;
+  matched: boolean;
+  score: number;
+  faq_id: string | null;
+  faq_question: string | null;
+  category_name: string | null;
+  answer_type: string | null;
+  selected_model: string | null;
+  metadata?: HistoryMetadata | Record<string, unknown>;
+};
+
 export type ReportMode = "single" | "trend" | "multi";
 
 const REQUIRED_FIELDS = ["total_count", "matched_count", "unmatched_count"] as const;
@@ -153,3 +243,42 @@ export function sortByDate(rows: ReportRow[]): ReportRow[] {
     return aTime - bTime;
   });
 }
+
+export const SUPPORT_MENU_LABELS: Record<string, string> = {
+  product: "제품관련",
+  "exchange-refund": "교환/환불",
+  as: "AS 문의",
+  purchase: "구매 문의",
+  other: "기타",
+  main: "메인 메뉴",
+};
+
+export function supportMenuLabel(menuId?: string | null): string {
+  if (!menuId) return "제품관련";
+  return SUPPORT_MENU_LABELS[menuId] || menuId;
+}
+
+export function channelFriendStatusLabel(status?: string | null): string {
+  if (status === "friend") return "채널 친구";
+  if (status === "not_friend") return "비친구";
+  return "미확인";
+}
+
+export function channelFriendTone(status?: string | null): "good" | "warn" | "bad" {
+  if (status === "friend") return "good";
+  if (status === "not_friend") return "warn";
+  return "bad";
+}
+
+export function confidenceTone(confidence?: string | null): "good" | "warn" | "bad" {
+  if (confidence === "high") return "good";
+  if (confidence === "medium") return "warn";
+  return "bad";
+}
+
+export function resultTypeLabel(resultType?: string | null): string {
+  if (resultType === "low_confidence") return "저신뢰도";
+  if (resultType === "unmatched") return "미매칭";
+  return resultType || "-";
+}
+

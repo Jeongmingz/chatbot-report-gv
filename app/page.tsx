@@ -15,7 +15,25 @@ import {
 import type { ChartOptions } from "chart.js";
 import { useEffect, useMemo, useState } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import { brandLabel, matchRate, shortDate, sortByDate, type ReportRow } from "@/lib/report";
+import {
+  brandLabel,
+  matchRate,
+  shortDate,
+  sortByDate,
+  supportMenuLabel,
+  channelFriendStatusLabel,
+  channelFriendTone,
+  confidenceTone,
+  resultTypeLabel,
+  type ReportRow,
+  type FaqSummaryRow,
+  type UnmatchedQueryRow,
+  type ImprovementQueueRow,
+  type ChannelFriendSummaryRow,
+  type HistoryRow,
+  type HistoryMetadata,
+} from "@/lib/report";
+import { exportDashboardPdf } from "@/lib/pdf-export";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
 
@@ -23,53 +41,12 @@ type DashboardData = {
   daily: ReportRow[];
   faqSummary: FaqSummaryRow[];
   unmatchedQueries: UnmatchedQueryRow[];
+  improvementQueue: ImprovementQueueRow[];
+  channelFriendSummary: ChannelFriendSummaryRow[];
   history: HistoryRow[];
 };
 
-type FaqSummaryRow = {
-  brand: string;
-  brand_name: string;
-  category_id: string | null;
-  category_name: string | null;
-  faq_id: string | null;
-  faq_question: string | null;
-  answer_type: string | null;
-  selected_model: string | null;
-  hit_count: number;
-  unique_user_count: number;
-  avg_score: number | null;
-  first_occurred_at: string | null;
-  last_occurred_at: string | null;
-};
-
-type UnmatchedQueryRow = {
-  brand: string;
-  brand_name: string;
-  query_key: string;
-  sample_query: string;
-  query_count: number;
-  unique_user_count: number;
-  last_occurred_at: string | null;
-};
-
-type HistoryRow = {
-  id: number;
-  occurred_at: string;
-  brand: string;
-  brand_name: string;
-  source: string;
-  user_id: string | null;
-  query: string;
-  matched: boolean;
-  score: number;
-  faq_id: string | null;
-  faq_question: string | null;
-  category_name: string | null;
-  answer_type: string | null;
-  selected_model: string | null;
-};
-
-type ActiveTab = "daily" | "faq" | "unmatched" | "history";
+type ActiveTab = "daily" | "faq" | "unmatched" | "improvement" | "channelFriend" | "history";
 
 type BrandOption = {
   brand: string;
@@ -197,12 +174,14 @@ export default function Home() {
         daily: payload.daily || [],
         faqSummary: payload.faqSummary || [],
         unmatchedQueries: payload.unmatchedQueries || [],
+        improvementQueue: payload.improvementQueue || [],
+        channelFriendSummary: payload.channelFriendSummary || [],
         history: payload.history || [],
       };
 
       setData(nextData);
       setNotice(
-        `일일 ${numberFormat.format(nextData.daily.length)}건, FAQ ${numberFormat.format(nextData.faqSummary.length)}건, 미매칭 ${numberFormat.format(nextData.unmatchedQueries.length)}건, 히스토리 ${numberFormat.format(nextData.history.length)}건을 불러왔습니다.`,
+        `일일 ${numberFormat.format(nextData.daily.length)}건, FAQ ${numberFormat.format(nextData.faqSummary.length)}건, 미매칭 ${numberFormat.format(nextData.unmatchedQueries.length)}건, 개선대기열 ${numberFormat.format(nextData.improvementQueue.length)}건, 채널친구 ${numberFormat.format(nextData.channelFriendSummary.length)}건, 히스토리 ${numberFormat.format(nextData.history.length)}건을 불러왔습니다.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "DB 데이터를 불러오는 중 오류가 발생했습니다.");
@@ -213,35 +192,32 @@ export default function Home() {
 
   async function exportPdf() {
     const target = document.getElementById("pdfContent");
-    if (!target) return;
+    if (!target || !data) return;
 
     setError("");
     setIsExporting(true);
-    document.body.classList.add("pdf-exporting");
     try {
-      const html2pdf = (await import("html2pdf.js")).default;
       const today = new Date().toISOString().slice(0, 10);
-      await new Promise((resolve) => window.setTimeout(resolve, 250));
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename: `챗봇_히스토리_리포트_${today}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: "#f5f4f0",
+      await exportDashboardPdf(target, {
+        filename: `챗봇_운영_보고서_${today}.pdf`,
+        report: {
+          filters: {
+            from,
+            to,
+            brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드",
+            limit,
           },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-        })
-        .from(target)
-        .save();
+          daily: data.daily,
+          faqSummary: data.faqSummary,
+          unmatchedQueries: data.unmatchedQueries,
+          improvementQueue: data.improvementQueue,
+          channelFriendSummary: data.channelFriendSummary,
+          history: data.history,
+        },
+      });
     } catch (err) {
       setError(err instanceof Error ? `PDF 생성 중 오류가 발생했습니다: ${err.message}` : "PDF 생성 중 오류가 발생했습니다.");
     } finally {
-      document.body.classList.remove("pdf-exporting");
       setIsExporting(false);
     }
   }
@@ -276,12 +252,24 @@ export default function Home() {
 
       {data ? (
         <section className="dashboard" id="pdfContent">
+          <div className="pdf-report-header">
+            <div>
+              <h1>챗봇 히스토리 운영 리포트</h1>
+              <p>{from || "전체"} ~ {to || "전체"}</p>
+            </div>
+            <div className="pdf-report-meta">
+              <strong>{brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드"}</strong>
+              <span>{numberFormat.format(Number(limit))}건 조회</span>
+            </div>
+          </div>
           <MetricGrid
             metrics={[
               ["총 대화", summary.totalCount, "건"],
               ["매칭 성공", summary.matchedCount, "건", "blue"],
               ["매칭 실패", summary.unmatchedCount, "건", "red"],
               ["평균 매칭률", summary.matchRate, "%", summary.matchRate >= 80 ? "blue" : summary.matchRate >= 60 ? "warn" : "red", 1],
+              ["채널 친구 대화", summary.friendRequests, `건 (${summary.friendRate.toFixed(1)}%)`, "green"],
+              ["개선 시급 질문", summary.improvementCount, `건 (${summary.improvementTypes}종)`, summary.improvementCount > 0 ? "warn" : "blue"],
             ]}
           />
 
@@ -304,7 +292,18 @@ export default function Home() {
                 <Line data={dailyRateChart(data.daily)} options={linePercentOptions} />
               </div>
             </ChartCard>
-            <ChartCard title="상위 미매칭 질문">
+            <ChartCard title="카카오 채널 친구 구성">
+              <div className="chart-frame" style={{ "--chart-height": "240px" } as React.CSSProperties}>
+                <Doughnut data={channelFriendDoughnutChart(data.channelFriendSummary)} options={channelFriendDoughnutOptions(summary.totalCount)} />
+              </div>
+            </ChartCard>
+          </div>
+
+          <div className="charts-row">
+            <ChartCard title="FAQ 개선 대기열 TOP 5 (미매칭 & 저신뢰도)">
+              <ImprovementTopList rows={data.improvementQueue.slice(0, 5)} />
+            </ChartCard>
+            <ChartCard title="상위 미매칭 질문 TOP 5">
               <TopList rows={data.unmatchedQueries.slice(0, 5)} />
             </ChartCard>
           </div>
@@ -314,12 +313,14 @@ export default function Home() {
           {activeTab === "daily" && <DataTable title="faq_history_daily_summary" rows={data.daily} columns={dailyColumns} />}
           {activeTab === "faq" && <DataTable title="faq_history_faq_summary" rows={data.faqSummary} columns={faqColumns} />}
           {activeTab === "unmatched" && <DataTable title="faq_history_unmatched_queries" rows={data.unmatchedQueries} columns={unmatchedColumns} />}
+          {activeTab === "improvement" && <DataTable title="faq_history_improvement_queue" rows={data.improvementQueue} columns={improvementColumns} />}
+          {activeTab === "channelFriend" && <DataTable title="faq_history_channel_friend_summary" rows={data.channelFriendSummary} columns={channelFriendColumns} />}
           {activeTab === "history" && <DataTable title="faq_history" rows={data.history} columns={historyColumns} />}
         </section>
       ) : (
         <section className="empty-state">
           <div className="empty-state__title">DB 데이터를 불러오면 히스토리 테이블과 분석 뷰가 표시됩니다.</div>
-          <div className="empty-state__sub">`sql/history_sql.sql` 기준: faq_history, daily_summary, faq_summary, unmatched_queries</div>
+          <div className="empty-state__sub">`sql/history_sql.sql` 기준: faq_history, daily_summary, faq_summary, unmatched_queries, improvement_queue, channel_friend_summary</div>
         </section>
       )}
     </main>
@@ -424,6 +425,8 @@ function Tabs({ activeTab, onChange, counts }: { activeTab: ActiveTab; onChange:
     ["daily", "일일 요약", counts.daily.length],
     ["faq", "FAQ 매칭", counts.faqSummary.length],
     ["unmatched", "미매칭 질문", counts.unmatchedQueries.length],
+    ["improvement", "개선 대기열", counts.improvementQueue.length],
+    ["channelFriend", "채널 친구", counts.channelFriendSummary.length],
     ["history", "원본 히스토리", counts.history.length],
   ];
 
@@ -486,6 +489,34 @@ function DataTable<T extends Record<string, unknown>>({ title, rows, columns }: 
   );
 }
 
+function ImprovementTopList({ rows }: { rows: ImprovementQueueRow[] }) {
+  if (!rows.length) {
+    return <div className="empty-list">개선 대기열 항목이 없습니다.</div>;
+  }
+
+  return (
+    <div className="top-list">
+      {rows.map((row, index) => (
+        <div className="top-list__row" key={`${row.brand}-${row.query_key}-${index}`}>
+          <span className="top-list__rank">{index + 1}</span>
+          <div className="top-list__main">
+            <strong>{row.sample_query}</strong>
+            <div className="top-list__subline">
+              <span>{row.brand_name}</span>
+              <span className="dot-sep">·</span>
+              <span>{supportMenuLabel(row.menu_id)}</span>
+              <span className={`status-chip ${row.result_type === "low_confidence" ? "warn" : "bad"}`}>
+                {resultTypeLabel(row.result_type)}
+              </span>
+            </div>
+          </div>
+          <span className="top-list__count">{numberFormat.format(row.query_count)}건</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TopList({ rows }: { rows: UnmatchedQueryRow[] }) {
   if (!rows.length) {
     return <div className="empty-list">미매칭 질문이 없습니다.</div>;
@@ -494,11 +525,22 @@ function TopList({ rows }: { rows: UnmatchedQueryRow[] }) {
   return (
     <div className="top-list">
       {rows.map((row, index) => (
-        <div className="top-list__row" key={`${row.brand}-${row.query_key}`}>
+        <div className="top-list__row" key={`${row.brand}-${row.query_key}-${index}`}>
           <span className="top-list__rank">{index + 1}</span>
           <div className="top-list__main">
             <strong>{row.sample_query}</strong>
-            <span>{row.brand_name}</span>
+            <div className="top-list__subline">
+              <span>{row.brand_name}</span>
+              {row.menu_id && (
+                <>
+                  <span className="dot-sep">·</span>
+                  <span>{supportMenuLabel(row.menu_id)}</span>
+                </>
+              )}
+              {row.query_count_7d !== undefined && row.query_count_7d > 0 && (
+                <span className="recent-badge">7일 {row.query_count_7d}건</span>
+              )}
+            </div>
           </div>
           <span className="top-list__count">{numberFormat.format(row.query_count)}건</span>
         </div>
@@ -554,12 +596,66 @@ function summarize(data: DashboardData | null) {
   const totalCount = daily.reduce((sum, row) => sum + row.total_count, 0);
   const matchedCount = daily.reduce((sum, row) => sum + row.matched_count, 0);
   const unmatchedCount = daily.reduce((sum, row) => sum + row.unmatched_count, 0);
+  const matchRate = totalCount ? (matchedCount / totalCount) * 100 : 0;
+
+  const friends = data?.channelFriendSummary || [];
+  const friendRequests = friends
+    .filter((f) => f.channel_friend_status === "friend")
+    .reduce((sum, f) => sum + f.total_requests, 0);
+  const friendRate = totalCount ? (friendRequests / totalCount) * 100 : 0;
+
+  const improvements = data?.improvementQueue || [];
+  const improvementCount = improvements.reduce((sum, item) => sum + item.query_count, 0);
 
   return {
     totalCount,
     matchedCount,
     unmatchedCount,
-    matchRate: totalCount ? (matchedCount / totalCount) * 100 : 0,
+    matchRate,
+    friendRequests,
+    friendRate,
+    improvementCount,
+    improvementTypes: improvements.length,
+  };
+}
+
+function channelFriendDoughnutChart(rows: ChannelFriendSummaryRow[]) {
+  const friend = rows.filter((r) => r.channel_friend_status === "friend").reduce((s, r) => s + r.total_requests, 0);
+  const notFriend = rows.filter((r) => r.channel_friend_status === "not_friend").reduce((s, r) => s + r.total_requests, 0);
+  const unknown = rows
+    .filter((r) => r.channel_friend_status !== "friend" && r.channel_friend_status !== "not_friend")
+    .reduce((s, r) => s + r.total_requests, 0);
+
+  return {
+    labels: ["채널 친구", "비친구", "미확인"],
+    datasets: [
+      {
+        data: [friend, notFriend, unknown],
+        backgroundColor: ["#3B6D11", "#854F0B", "#B4B2A9"],
+        borderWidth: 0,
+        hoverOffset: 4,
+      },
+    ],
+  };
+}
+
+function channelFriendDoughnutOptions(total: number): ChartOptions<"doughnut"> {
+  return {
+    ...commonChartOptions,
+    layout: { padding: 8 },
+    cutout: "68%",
+    plugins: {
+      legend: { position: "bottom" },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = Number(context.raw) || 0;
+            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
+            return `${context.label}: ${numberFormat.format(value)}건 (${percent}%)`;
+          },
+        },
+      },
+    },
   };
 }
 
@@ -722,22 +818,96 @@ const faqColumns: Array<Column<FaqSummaryRow & Record<string, unknown>>> = [
 
 const unmatchedColumns: Array<Column<UnmatchedQueryRow & Record<string, unknown>>> = [
   { key: "brand_name", label: "브랜드" },
+  { key: "menu_id", label: "문의 메뉴", render: (row) => <span className="menu-tag">{supportMenuLabel(row.menu_id)}</span> },
   { key: "sample_query", label: "샘플 질문" },
   { key: "query_key", label: "정규화 키" },
-  { key: "query_count", label: "건수", render: (row) => numberFormat.format(row.query_count) },
+  { key: "query_count", label: "전체 건수", render: (row) => numberFormat.format(row.query_count) },
+  { key: "query_count_7d", label: "최근 7일", render: (row) => row.query_count_7d !== undefined ? numberFormat.format(row.query_count_7d) : "-" },
+  { key: "query_count_30d", label: "최근 30일", render: (row) => row.query_count_30d !== undefined ? numberFormat.format(row.query_count_30d) : "-" },
   { key: "unique_user_count", label: "사용자" },
+  { key: "avg_score", label: "평균 점수", render: (row) => (row.avg_score !== undefined && row.avg_score !== null ? row.avg_score.toFixed(1) : "-") },
+  { key: "last_occurred_at", label: "최근 발생", render: (row) => formatDateTime(row.last_occurred_at) },
+];
+
+const improvementColumns: Array<Column<ImprovementQueueRow & Record<string, unknown>>> = [
+  { key: "brand_name", label: "브랜드" },
+  {
+    key: "result_type",
+    label: "구분",
+    render: (row) => (
+      <span className={`status-chip ${row.result_type === "low_confidence" ? "warn" : "bad"}`}>
+        {resultTypeLabel(row.result_type)}
+      </span>
+    ),
+  },
+  { key: "menu_id", label: "문의 메뉴", render: (row) => <span className="menu-tag">{supportMenuLabel(row.menu_id)}</span> },
+  { key: "sample_query", label: "고객 질문" },
+  { key: "query_count", label: "발생 건수", render: (row) => numberFormat.format(row.query_count) },
+  { key: "unique_user_count", label: "사용자" },
+  { key: "avg_score", label: "평균 점수", render: (row) => (row.avg_score !== null && row.avg_score !== undefined ? row.avg_score.toFixed(1) : "-") },
+  { key: "last_occurred_at", label: "최근 발생", render: (row) => formatDateTime(row.last_occurred_at) },
+];
+
+const channelFriendColumns: Array<Column<ChannelFriendSummaryRow & Record<string, unknown>>> = [
+  { key: "brand_name", label: "브랜드" },
+  {
+    key: "channel_friend_status",
+    label: "친구 상태",
+    render: (row) => (
+      <span className={`status-chip ${channelFriendTone(row.channel_friend_status)}`}>
+        {channelFriendStatusLabel(row.channel_friend_status)}
+      </span>
+    ),
+  },
+  { key: "total_requests", label: "총 요청", render: (row) => numberFormat.format(row.total_requests) },
+  { key: "unique_users", label: "사용자", render: (row) => numberFormat.format(row.unique_users) },
+  { key: "matched_requests", label: "매칭 성공", render: (row) => numberFormat.format(row.matched_requests) },
+  { key: "unmatched_requests", label: "매칭 실패", render: (row) => numberFormat.format(row.unmatched_requests) },
+  { key: "match_rate_pct", label: "매칭률", render: (row) => `${(row.match_rate_pct ?? 0).toFixed(1)}%` },
+  { key: "avg_score", label: "평균 점수", render: (row) => (row.avg_score !== null && row.avg_score !== undefined ? row.avg_score.toFixed(1) : "-") },
   { key: "last_occurred_at", label: "최근 발생", render: (row) => formatDateTime(row.last_occurred_at) },
 ];
 
 const historyColumns: Array<Column<HistoryRow & Record<string, unknown>>> = [
   { key: "occurred_at", label: "발생 시각", render: (row) => formatDateTime(row.occurred_at) },
   { key: "brand_name", label: "브랜드" },
-  { key: "source", label: "소스" },
+  {
+    key: "friend",
+    label: "채널친구",
+    render: (row) => {
+      const meta = (row.metadata as HistoryMetadata) || {};
+      const isFriend = meta.isFriend;
+      if (isFriend === true) return <span className="status-chip good">친구</span>;
+      if (isFriend === false) return <span className="status-chip warn">비친구</span>;
+      return <span className="status-chip neutral">미확인</span>;
+    },
+  },
   { key: "query", label: "질문" },
-  { key: "matched", label: "매칭", render: (row) => <span className={`status-chip ${row.matched ? "good" : "bad"}`}>{row.matched ? "성공" : "실패"}</span> },
+  {
+    key: "matched",
+    label: "매칭",
+    render: (row) => <span className={`status-chip ${row.matched ? "good" : "bad"}`}>{row.matched ? "성공" : "실패"}</span>,
+  },
+  {
+    key: "confidence",
+    label: "신뢰도",
+    render: (row) => {
+      const meta = (row.metadata as HistoryMetadata) || {};
+      const conf = meta.confidence;
+      if (!conf) return "-";
+      return <span className={`status-chip ${confidenceTone(conf)}`}>{conf}</span>;
+    },
+  },
   { key: "score", label: "점수", render: (row) => row.score.toFixed(1) },
   { key: "faq_question", label: "매칭 FAQ" },
-  { key: "category_name", label: "카테고리" },
+  {
+    key: "menu_id",
+    label: "문의 메뉴",
+    render: (row) => {
+      const meta = (row.metadata as HistoryMetadata) || {};
+      return <span className="menu-tag">{supportMenuLabel(meta.menuId)}</span>;
+    },
+  },
   { key: "selected_model", label: "모델" },
 ];
 
