@@ -270,7 +270,12 @@ export function channelFriendTone(status?: string | null): "good" | "warn" | "ba
   return "bad";
 }
 
-export function confidenceTone(confidence?: string | null): "good" | "warn" | "bad" {
+export function confidenceTone(confidence?: string | number | null): "good" | "warn" | "bad" {
+  if (typeof confidence === "number") {
+    if (confidence >= 80) return "good";
+    if (confidence >= 60) return "warn";
+    return "bad";
+  }
   if (confidence === "high") return "good";
   if (confidence === "medium") return "warn";
   return "bad";

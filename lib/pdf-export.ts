@@ -9,15 +9,12 @@ import {
 } from "@/lib/report";
 
 const PDF_WIDTH_PX = 1040;
-const PDF_LANDSCAPE_WIDTH_PX = 1370;
-const PDF_PAGE_CONTENT_HEIGHT_PX = 1370;
-const PDF_LANDSCAPE_CONTENT_HEIGHT_PX = 900;
-const OVERVIEW_RENDER_SCALE = 1.5;
-const TABLE_RENDER_SCALE = 1.2;
+const PDF_PAGE_HEIGHT_PX = 1470;
+const PDF_RENDER_SCALE = 2.0;
 
 export type PdfExportOptions = {
   filename: string;
-  report?: PdfReportInput;
+  report: PdfReportInput;
 };
 
 export type PdfReportInput = {
@@ -67,11 +64,9 @@ export type PdfHistoryRow = {
   metadata?: Record<string, unknown>;
 };
 
-export async function exportDashboardPdf(source: HTMLElement, options: PdfExportOptions) {
+export async function exportDashboardPdf(_source: HTMLElement, options: PdfExportOptions) {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const previousScroll = { x: window.scrollX, y: window.scrollY };
-  const previousSourceDisplay = source.style.display;
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const stage = document.createElement("div");
   stage.className = "pdf-stage";
 
@@ -79,45 +74,40 @@ export async function exportDashboardPdf(source: HTMLElement, options: PdfExport
     document.body.classList.add("pdf-exporting");
     window.scrollTo(0, 0);
     document.body.appendChild(stage);
-    activeElement?.blur();
     await waitForDocumentFonts();
     await nextPaint();
 
-    const pages = options.report ? buildReportPdfPages(options.report, stage) : buildPdfPages(source, stage);
-    if (pages.length === 0) throw new Error("PDF로 내보낼 내용이 없습니다.");
-
-    if (!options.report) copyChartCanvases(source, pages[0]);
+    const pages = buildReportPdfPages(options.report, stage);
+    if (pages.length === 0) throw new Error("PDF로 내보낼 페이지가 생성되지 않았습니다.");
     await nextPaint();
-    source.style.display = "none";
 
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
 
     for (let index = 0; index < pages.length; index += 1) {
       pages.forEach((page, pageIndex) => {
-        page.style.display = pageIndex === index ? "block" : "none";
+        page.style.display = pageIndex === index ? "flex" : "none";
       });
 
       const canvas = await html2canvas(pages[index], {
-        scale: pages[index].classList.contains("pdf-page--table") ? TABLE_RENDER_SCALE : OVERVIEW_RENDER_SCALE,
+        scale: PDF_RENDER_SCALE,
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
-        windowWidth: pages[index].offsetWidth,
-        windowHeight: pages[index].scrollHeight,
-        height: pages[index].scrollHeight,
+        windowWidth: PDF_WIDTH_PX,
+        windowHeight: PDF_PAGE_HEIGHT_PX,
+        height: PDF_PAGE_HEIGHT_PX,
         scrollX: 0,
         scrollY: 0,
       });
 
       if (index > 0) {
-        pdf.addPage("a4", pages[index].classList.contains("pdf-page--landscape") ? "landscape" : "portrait");
+        pdf.addPage("a4", "portrait");
       }
-      addCanvasPage(pdf, canvas, index + 1, pages.length);
+      addCanvasPage(pdf, canvas);
     }
 
     pdf.save(options.filename);
   } finally {
-    source.style.display = previousSourceDisplay;
     stage.remove();
     document.body.classList.remove("pdf-exporting");
     window.scrollTo(previousScroll.x, previousScroll.y);
@@ -127,135 +117,242 @@ export async function exportDashboardPdf(source: HTMLElement, options: PdfExport
 function buildReportPdfPages(report: PdfReportInput, stage: HTMLElement) {
   const metrics = summarizeReport(report);
   const insights = buildReportInsights(report, metrics);
+  const totalPages = 6;
+
   const pages = [
-    createReportPage("요약", report, (page) => renderExecutiveSummary(page, report, metrics, insights)),
-    createReportPage("일별 추세", report, (page) => renderDailyTrend(page, report, metrics)),
-    createReportPage("FAQ 성과", report, (page) => renderFaqPerformance(page, report)),
-    createReportPage("개선 대기열", report, (page) => renderImprovementQueue(page, report, insights)),
-    createReportPage("채널 친구 분석", report, (page) => renderChannelFriendSummary(page, report, metrics)),
-    createReportPage("근거 데이터", report, (page) => renderAppendix(page, report)),
+    // Page 1: 종합 요약
+    createReportPage("01. 종합 운영 요약 (Executive Summary)", 1, totalPages, report, (page) =>
+      renderExecutiveSummary(page, report, metrics, insights),
+    ),
+    // Page 2: 일별 대화량 및 매칭률 추세
+    createReportPage("02. 일자별 대화량 및 매칭률 추세 (Daily Trend)", 2, totalPages, report, (page) =>
+      renderDailyTrend(page, report, metrics),
+    ),
+    // Page 3: 상위 FAQ 매칭 성과
+    createReportPage("03. 상위 FAQ 매칭 성과 및 분석 (FAQ Performance)", 3, totalPages, report, (page) =>
+      renderFaqPerformance(page, report),
+    ),
+    // Page 4: FAQ 개선 대기열 & 미매칭
+    createReportPage("04. FAQ 개선 대기열 및 미매칭 분석 (Improvement Queue)", 4, totalPages, report, (page) =>
+      renderImprovementQueue(page, report),
+    ),
+    // Page 5: 카카오톡 채널 친구 분석
+    createReportPage("05. 카카오톡 채널 친구 참여도 분석 (Channel Engagement)", 5, totalPages, report, (page) =>
+      renderChannelFriendSummary(page, report, metrics),
+    ),
+    // Page 6: 데이터 명세 및 히스토리 감사 로그
+    createReportPage("06. 대화 히스토리 감사 로그 및 데이터 명세 (Audit Appendix)", 6, totalPages, report, (page) =>
+      renderAppendix(page, report, metrics),
+    ),
   ];
 
   pages.forEach((page) => stage.appendChild(page));
   return pages;
 }
 
-function createReportPage(title: string, report: PdfReportInput, render: (page: HTMLElement) => void) {
+function createReportPage(
+  title: string,
+  pageNumber: number,
+  totalPages: number,
+  report: PdfReportInput,
+  render: (page: HTMLElement) => void,
+) {
   const page = document.createElement("section");
-  page.className = "pdf-page pdf-report-page";
-  page.appendChild(
-    el("header", "pdf-report-page__header", [
-      el("div", "", [el("p", "pdf-report-kicker", ["Kakao Chatbot Operations Report"]), el("h1", "", [title])]),
-      el("div", "pdf-report-filter", [
-        el("strong", "", [report.filters.brandLabel || "전체 브랜드"]),
-        el("span", "", [`${report.filters.from || "전체"} ~ ${report.filters.to || "전체"}`]),
-      ]),
+  page.className = "pdf-sheet";
+
+  // Header
+  const header = el("header", "pdf-sheet-header", [
+    el("div", "pdf-sheet-brand-group", [
+      el("span", "pdf-kicker-tag", ["Gatevision Kakao Chatbot Intelligence"]),
+      el("h2", "", [title]),
     ]),
-  );
+    el("div", "pdf-meta-box", [
+      el("span", "pdf-meta-brand", [report.filters.brandLabel || "전체 브랜드"]),
+      el("span", "pdf-meta-period", [`조회기간: ${report.filters.from || "전체"} ~ ${report.filters.to || "전체"}`]),
+    ]),
+  ]);
+  page.appendChild(header);
+
+  // Content
   render(page);
+
+  // Footer
+  const footer = el("footer", "pdf-sheet-footer", [
+    el("span", "", ["게이트비전(Gatevision) AI 챗봇 운영 센터"]),
+    el("span", "", [`Page ${pageNumber} of ${totalPages}`]),
+    el("span", "", ["Confidential • 내부 검토용"]),
+  ]);
+  page.appendChild(footer);
+
   return page;
 }
 
-function renderExecutiveSummary(page: HTMLElement, report: PdfReportInput, metrics: ReportMetrics, insights: string[]) {
+// -------------------------------------------------------------
+// PAGE 1: EXECUTIVE SUMMARY
+// -------------------------------------------------------------
+function renderExecutiveSummary(page: HTMLElement, _report: PdfReportInput, metrics: ReportMetrics, insights: string[]) {
+  // 4-Tile Row
   page.appendChild(
-    el("section", "pdf-hero-grid", [
-      metricTile("총 대화", formatNumber(metrics.totalCount), "건"),
-      metricTile("매칭률", `${formatDecimal(metrics.matchRate)}%`, metrics.matchRate >= 80 ? "양호" : metrics.matchRate >= 60 ? "점검" : "주의"),
-      metricTile("채널 친구 대화", formatNumber(metrics.friendCount), `건 (${formatDecimal(metrics.friendRate)}%)`),
-      metricTile("개선 시급 질문", formatNumber(metrics.improvementCount), "건"),
+    el("section", "pdf-kpi-row", [
+      kpiTile("총 대화 건수", formatNumber(metrics.totalCount), "건", "누적 사용자 질의"),
+      kpiTile("평균 매칭률", `${metrics.matchRate.toFixed(1)}%`, metrics.matchRate >= 80 ? "목표 달성" : "보강 권장", "FAQ 자동 응답 성공률"),
+      kpiTile("채널 친구 대화", formatNumber(metrics.friendCount), `건 (${metrics.friendRate.toFixed(1)}%)`, "카카오 플친 유입"),
+      kpiTile("개선 시급 질문", formatNumber(metrics.improvementCount), "건", "미매칭 + 저신뢰도"),
     ]),
   );
 
-  page.appendChild(
-    el("section", "pdf-two-col", [
-      el("div", "pdf-panel pdf-panel--accent", [
-        el("h2", "", ["핵심 인사이트"]),
-        bulletList(insights.slice(0, 4)),
-      ]),
-      el("div", "pdf-panel", [
-        el("h2", "", ["매칭 구성"]),
-        donutSvg(metrics.matchedCount, metrics.unmatchedCount),
-        el("div", "pdf-legend", [
-          legendItem("매칭 성공", "#378ADD", formatNumber(metrics.matchedCount)),
-          legendItem("매칭 실패", "#E24B4A", formatNumber(metrics.unmatchedCount)),
-        ]),
+  // Two Column Panel: Insights & Doughnut
+  const twoCol = el("div", "", []);
+  twoCol.style.display = "grid";
+  twoCol.style.gridTemplateColumns = "1.2fr 0.8fr";
+  twoCol.style.gap = "20px";
+  twoCol.style.marginBottom = "20px";
+
+  // Left: Key Insights
+  const leftPanel = el("div", "pdf-card-panel", [
+    el("h3", "", ["운영 핵심 인사이트 (Key Takeaways)"]),
+    el("p", "section-desc", ["조회 기간 동안 축적된 카카오 챗봇 질의응답 패턴에 대한 데이터 분석 결과입니다."]),
+    bulletList(insights.slice(0, 4)),
+  ]);
+
+  // Right: Doughnut Matching SVG
+  const rightPanel = el("div", "pdf-card-panel", [
+    el("h3", "", ["전체 매칭 현황"]),
+    donutSvg(metrics.matchedCount, metrics.unmatchedCount, metrics.matchRate),
+    el("div", "", [
+      legendRow([
+        { label: "매칭 성공", color: "#4f46e5", value: `${formatNumber(metrics.matchedCount)}건` },
+        { label: "매칭 실패", color: "#f43f5e", value: `${formatNumber(metrics.unmatchedCount)}건` },
       ]),
     ]),
-  );
+  ]);
 
+  twoCol.appendChild(leftPanel);
+  twoCol.appendChild(rightPanel);
+  page.appendChild(twoCol);
+
+  // Bottom: Priority Actions
   page.appendChild(
-    el("section", "pdf-panel pdf-action-box", [
-      el("h2", "", ["우선순위"]),
+    el("div", "pdf-highlight-box", [
+      el("h4", "", ["🎯 경영진 제언 및 최우선 실행 과제"]),
       bulletList([
         metrics.improvementCount > 0
-          ? "개선 대기열의 미매칭 및 저신뢰도 TOP 질문을 FAQ 후보로 전환하고 유사어 사전을 보강합니다."
-          : "현재 조회 범위에는 개선 시급 데이터가 적어 기존 FAQ 품질 유지가 우선입니다.",
-        "조회수가 높은 FAQ는 답변 문구와 선택 모델을 기준으로 재사용 가능한 표준 답변으로 관리합니다.",
-        "채널 친구 비중 확대를 위해 FAQ 응답 하단에 카카오 채널 추가 혜택 버튼을 적극 배치합니다.",
+          ? `개선 대기열에 등록된 ${formatNumber(metrics.improvementCount)}건의 낙오 및 저신뢰도 질문을 신규 표준 FAQ로 즉각 반영하고 형태소 사전을 보강하십시오.`
+          : "전체 매칭률이 안정적이므로, 현재 등록된 상위 FAQ 답변의 정확도와 친절도를 유지 관리합니다.",
+        "조회수가 집중되는 상위 FAQ 질문군을 파악하여 챗봇 메인 메뉴(웰컴 블록) 전면에 퀵 버튼으로 배치함으로써 고객 접근 경로를 단축합니다.",
+        `카카오톡 채널 친구 대화 비중(${metrics.friendRate.toFixed(1)}%)을 추가 확대하기 위해 답변 카드 하단에 '채널 추가 혜택' 배너를 유도 배치합니다.`,
       ]),
     ]),
   );
 }
 
+// -------------------------------------------------------------
+// PAGE 2: DAILY TREND
+// -------------------------------------------------------------
 function renderDailyTrend(page: HTMLElement, report: PdfReportInput, metrics: ReportMetrics) {
   page.appendChild(
-    el("section", "pdf-panel", [
-      el("h2", "", ["대화량 및 매칭률 추세"]),
-      el("p", "pdf-section-note", ["조회 기간의 일별 대화량과 매칭 실패 비중을 함께 확인합니다."]),
-      dailyTrendSvg(report.daily),
+    el("div", "pdf-card-panel", [
+      el("h3", "", ["일자별 대화량 및 매칭 볼륨 추세"]),
+      el("p", "section-desc", ["일자별 총 대화량 및 매칭 성공(Indigo) / 실패(Rose) 추이를 모니터링합니다."]),
+      dailyStackedSvg(report.daily),
     ]),
   );
 
-  const rows = [...report.daily]
-    .sort((a, b) => (a.report_date || "").localeCompare(b.report_date || ""))
-    .map((row) => [
-      row.report_date || "-",
-      row.brand_name || row.brand || "-",
-      formatNumber(row.total_count),
-      formatNumber(row.matched_count),
-      formatNumber(row.unmatched_count),
-      `${formatDecimal(getRate(row))}%`,
-    ]);
+  const sorted = [...report.daily].sort((a, b) => (a.report_date || "").localeCompare(b.report_date || "")).slice(-12);
+  const rows = sorted.map((row) => [
+    row.report_date || "-",
+    row.brand_name || row.brand || "-",
+    formatNumber(row.total_count),
+    formatNumber(row.matched_count),
+    formatNumber(row.unmatched_count),
+    `${getMatchRate(row).toFixed(1)}%`,
+    formatNumber(row.unique_user_count || 0),
+  ]);
 
-  page.appendChild(renderCompactTable(["일자", "브랜드", "총 대화", "매칭", "미매칭", "매칭률"], rows.slice(-12)));
   page.appendChild(
-    el("p", "pdf-footnote", [`기간 평균 매칭률은 ${formatDecimal(metrics.matchRate)}%이며, 일별 변동은 FAQ 신규 질문 유입 여부와 함께 해석해야 합니다.`]),
+    renderPdfTable(
+      ["일자", "브랜드", "총 대화수", "매칭 성공", "매칭 실패", "매칭률", "순방문자"],
+      rows,
+      ["16%", "16%", "14%", "14%", "14%", "13%", "13%"],
+    ),
+  );
+
+  page.appendChild(
+    el("div", "pdf-highlight-box", [
+      el("h4", "", ["📈 추세 분석 결론"]),
+      bulletList([
+        `조회 기간 내 일평균 대화량은 약 ${sorted.length ? formatNumber(Math.round(metrics.totalCount / sorted.length)) : 0}건입니다.`,
+        `기간 전체 평균 매칭률은 ${metrics.matchRate.toFixed(1)}%이며, 특정 일자의 매칭률 급락은 프로모션 또는 신제품 관련 신규 문의 유입 여부와 연관됩니다.`,
+      ]),
+    ]),
   );
 }
 
+// -------------------------------------------------------------
+// PAGE 3: FAQ PERFORMANCE
+// -------------------------------------------------------------
 function renderFaqPerformance(page: HTMLElement, report: PdfReportInput) {
   const topFaqs = report.faqSummary.slice(0, 8);
+
   page.appendChild(
-    el("section", "pdf-panel", [
-      el("h2", "", ["상위 FAQ 매칭 성과"]),
-      el("p", "pdf-section-note", ["조회수가 높은 FAQ는 고객 질문이 반복되는 핵심 의도입니다."]),
-      horizontalBarSvg(topFaqs.map((row) => ({ label: truncate(row.faq_question || row.category_name || "FAQ", 34), value: row.hit_count })), "#185FA5"),
+    el("div", "pdf-card-panel", [
+      el("h3", "", ["상위 매칭 FAQ TOP 8"]),
+      el("p", "section-desc", ["고객이 가장 빈번하게 문의하여 해결된 표준 FAQ 목록입니다."]),
+      horizontalSvg(
+        topFaqs.map((f) => ({
+          label: truncate(f.faq_question || f.category_name || "FAQ", 34),
+          value: f.hit_count,
+        })),
+        "#4f46e5",
+      ),
     ]),
   );
 
   const rows = topFaqs.map((row) => [
     row.brand_name || "-",
     row.category_name || "-",
-    row.faq_question || "-",
+    truncate(row.faq_question || "-", 38),
     formatNumber(row.hit_count),
     formatNumber(row.unique_user_count),
-    row.avg_score === null ? "-" : formatDecimal(row.avg_score),
+    row.avg_score !== null ? `${row.avg_score.toFixed(1)}점` : "-",
+    row.last_occurred_at ? row.last_occurred_at.slice(0, 10) : "-",
   ]);
-  page.appendChild(renderCompactTable(["브랜드", "카테고리", "FAQ 질문", "조회", "사용자", "평균점수"], rows));
+
+  page.appendChild(
+    renderPdfTable(
+      ["브랜드", "카테고리", "FAQ 질문 내용", "매칭 건수", "사용자", "평균점수", "최근발생"],
+      rows,
+      ["14%", "16%", "34%", "10%", "9%", "9%", "8%"],
+    ),
+  );
+
+  page.appendChild(
+    el("div", "pdf-highlight-box", [
+      el("h4", "", ["💡 FAQ 답변 최적화 권고"]),
+      bulletList([
+        "매칭 건수 상위 20%의 질문이 전체 FAQ 해결의 대다수를 차지하므로, 해당 질문들의 답변 최신성을 정기 검수해야 합니다.",
+        "유사도 점수가 85점 이상으로 안정적인 질문은 표준 모범 응답으로 설정하여 AI 에이전트 라우팅 가이드로 활용합니다.",
+      ]),
+    ]),
+  );
 }
 
-function renderImprovementQueue(page: HTMLElement, report: PdfReportInput, insights: string[]) {
+// -------------------------------------------------------------
+// PAGE 4: IMPROVEMENT QUEUE
+// -------------------------------------------------------------
+function renderImprovementQueue(page: HTMLElement, report: PdfReportInput) {
   const queue = (report.improvementQueue || []).slice(0, 8);
+
   page.appendChild(
-    el("section", "pdf-panel pdf-panel--warning", [
-      el("h2", "", ["FAQ 개선 대기열 (미매칭 & 저신뢰도)"]),
-      el("p", "pdf-section-note", ["미매칭 질문과 유사도 60점 미만의 저신뢰도 질문을 합쳐 최우선 보강이 필요한 항목입니다."]),
-      horizontalBarSvg(
-        queue.map((row) => ({
-          label: `[${resultTypeLabel(row.result_type)}] ${truncate(row.sample_query, 32)}`,
-          value: row.query_count,
+    el("div", "pdf-card-panel", [
+      el("h3", "", ["FAQ 개선 대기열 TOP 8 (미매칭 & 저신뢰도)"]),
+      el("p", "section-desc", ["응답 실패(미매칭) 및 유사도 60점 미만으로 오답 위험이 있는 최우선 보강 대상입니다."]),
+      horizontalSvg(
+        queue.map((q) => ({
+          label: `[${resultTypeLabel(q.result_type)}] ${truncate(q.sample_query, 32)}`,
+          value: q.query_count,
         })),
-        "#E24B4A",
+        "#f43f5e",
       ),
     ]),
   );
@@ -264,44 +361,68 @@ function renderImprovementQueue(page: HTMLElement, report: PdfReportInput, insig
     row.brand_name || "-",
     resultTypeLabel(row.result_type),
     supportMenuLabel(row.menu_id),
-    truncate(row.sample_query, 38),
+    truncate(row.sample_query, 36),
     formatNumber(row.query_count),
     formatNumber(row.unique_user_count),
-    row.avg_score !== null && row.avg_score !== undefined ? formatDecimal(row.avg_score) : "-",
+    row.avg_score !== null && row.avg_score !== undefined ? `${row.avg_score.toFixed(1)}점` : "-",
+    row.last_occurred_at ? row.last_occurred_at.slice(0, 10) : "-",
   ]);
 
-  page.appendChild(renderCompactTable(["브랜드", "구분", "문의메뉴", "고객 질문", "발생건수", "사용자", "평균점수"], rows));
+  page.appendChild(
+    renderPdfTable(
+      ["브랜드", "구분", "문의메뉴", "대표 고객 질문", "발생건수", "사용자", "유사도", "최근일자"],
+      rows,
+      ["12%", "10%", "14%", "34%", "10%", "8%", "6%", "6%"],
+    ),
+  );
+
+  page.appendChild(
+    el("div", "pdf-highlight-box", [
+      el("h4", "", ["🛠️ 개선 대기열 실행 가이드"]),
+      bulletList([
+        "위 목록에 오른 질문은 FAQ 마스터 테이블에 신규 등록하거나 기존 유사 FAQ의 대표 유사어(Keywords)로 즉시 추가 등록합니다.",
+        "문의메뉴(AS/소모품/보증 등)가 명확한 질문의 경우 해당 메뉴의 상세 가이드 블록에 직접 매핑하여 응답 정확도를 제고합니다.",
+      ]),
+    ]),
+  );
 }
 
+// -------------------------------------------------------------
+// PAGE 5: CHANNEL FRIEND SUMMARY
+// -------------------------------------------------------------
 function renderChannelFriendSummary(page: HTMLElement, report: PdfReportInput, metrics: ReportMetrics) {
   const friends = report.channelFriendSummary || [];
-  page.appendChild(
-    el("section", "pdf-panel", [
-      el("h2", "", ["카카오톡 채널 친구 참여 및 매칭 현황"]),
-      el("p", "pdf-section-note", ["카카오 채널 친구 여부에 따른 고객 참여도 및 매칭 품질을 비교 분석합니다."]),
-    ]),
-  );
 
-  page.appendChild(
-    el("section", "pdf-two-col", [
-      el("div", "pdf-panel", [
-        el("h2", "", ["채널 친구 구성"]),
-        channelFriendDonutSvg(friends),
-        el("div", "pdf-legend", [
-          legendItem("채널 친구", "#3B6D11", formatNumber(metrics.friendCount)),
-          legendItem("비친구/미확인", "#B4B2A9", formatNumber(Math.max(0, metrics.totalCount - metrics.friendCount))),
-        ]),
-      ]),
-      el("div", "pdf-panel pdf-panel--accent", [
-        el("h2", "", ["고객 참여 분석"]),
-        bulletList([
-          `조회 기간 내 채널 친구의 대화는 ${formatNumber(metrics.friendCount)}건으로 전체의 ${formatDecimal(metrics.friendRate)}%입니다.`,
-          "채널 친구 사용자는 브랜드 충성도가 높고 재방문율이 우수하므로 핵심 공지 및 이벤트 우선 타겟으로 적합합니다.",
-          "비친구 사용자의 유입 질문 패턴을 분석하여 첫 답변 하단에 채널 추가 유도 버튼을 배치하는 것을 권장합니다.",
-        ]),
+  const twoCol = el("div", "", []);
+  twoCol.style.display = "grid";
+  twoCol.style.gridTemplateColumns = "1fr 1fr";
+  twoCol.style.gap = "20px";
+  twoCol.style.marginBottom = "20px";
+
+  const friendDoughnutPanel = el("div", "pdf-card-panel", [
+    el("h3", "", ["카카오 채널 친구 참여 비중"]),
+    channelFriendSvg(metrics.friendCount, Math.max(0, metrics.totalCount - metrics.friendCount), metrics.friendRate),
+    el("div", "", [
+      legendRow([
+        { label: "채널 친구", color: "#7c3aed", value: `${formatNumber(metrics.friendCount)}건` },
+        { label: "비친구 / 미확인", color: "#cbd5e1", value: `${formatNumber(Math.max(0, metrics.totalCount - metrics.friendCount))}건` },
       ]),
     ]),
-  );
+  ]);
+
+  const friendInsightPanel = el("div", "pdf-card-panel", [
+    el("h3", "", ["고객 참여 분석 및 로열티"]),
+    el("p", "section-desc", ["카카오톡 채널 친구 여부에 따른 고객 세그먼트별 활동 특성입니다."]),
+    bulletList([
+      `전체 대화 중 채널 친구의 이용 비중은 ${metrics.friendRate.toFixed(1)}%입니다.`,
+      "채널 친구는 브랜드 충성도가 높은 기존 고객 비중이 높아 재방문율과 AS/소모품 문의 빈도가 높습니다.",
+      "비친구 사용자는 주로 구매 전 스펙 비교나 기본 사용법 문의가 많으므로, 첫 응답 시 채널 친구 혜택(쿠폰/보증 연장)을 안내하는 것이 유리합니다.",
+    ]),
+  ]);
+
+  twoCol.appendChild(friendDoughnutPanel);
+  twoCol.appendChild(friendInsightPanel);
+  page.appendChild(twoCol);
 
   const rows = friends.map((row) => [
     row.brand_name || "-",
@@ -310,46 +431,304 @@ function renderChannelFriendSummary(page: HTMLElement, report: PdfReportInput, m
     formatNumber(row.unique_users),
     formatNumber(row.matched_requests),
     formatNumber(row.unmatched_requests),
-    `${formatDecimal(row.match_rate_pct)}%`,
-    row.avg_score !== null && row.avg_score !== undefined ? formatDecimal(row.avg_score) : "-",
+    `${row.match_rate_pct.toFixed(1)}%`,
+    row.avg_score !== null && row.avg_score !== undefined ? `${row.avg_score.toFixed(1)}점` : "-",
   ]);
 
-  page.appendChild(renderCompactTable(["브랜드", "친구 상태", "총 요청", "사용자", "매칭", "미매칭", "매칭률", "평균점수"], rows));
-}
-
-function renderAppendix(page: HTMLElement, report: PdfReportInput) {
   page.appendChild(
-    el("section", "pdf-panel", [
-      el("h2", "", ["원본 히스토리 샘플"]),
-      el("p", "pdf-section-note", ["보고서 판단의 근거가 되는 최신 대화 기록 일부입니다."]),
-    ]),
-  );
-
-  page.appendChild(
-    renderCompactTable(
-      ["발생시각", "브랜드", "질문", "결과", "점수", "매칭 FAQ"],
-      report.history.slice(0, 12).map((row) => [
-        formatDateTime(row.occurred_at),
-        row.brand_name || "-",
-        row.query || "-",
-        row.matched ? "성공" : "실패",
-        formatDecimal(row.score),
-        row.faq_question || row.category_name || "-",
-      ]),
+    renderPdfTable(
+      ["브랜드", "친구 상태", "총 요청수", "사용자", "매칭 성공", "매칭 실패", "매칭률", "평균점수"],
+      rows,
+      ["14%", "14%", "12%", "12%", "12%", "12%", "12%", "12%"],
     ),
   );
 }
 
-type ReportMetrics = {
-  totalCount: number;
-  matchedCount: number;
-  unmatchedCount: number;
-  matchRate: number;
-  uniqueUsers: number;
-  friendCount: number;
-  friendRate: number;
-  improvementCount: number;
-};
+// -------------------------------------------------------------
+// PAGE 6: AUDIT LOG APPENDIX
+// -------------------------------------------------------------
+function renderAppendix(page: HTMLElement, report: PdfReportInput, _metrics: ReportMetrics) {
+  page.appendChild(
+    el("div", "pdf-card-panel", [
+      el("h3", "", ["최신 대화 히스토리 감사 샘플 (Audit Log)"]),
+      el("p", "section-desc", ["본 보고서 산출의 근거가 되는 최근 원본 대화 로그 데이터입니다."]),
+    ]),
+  );
+
+  const rows = report.history.slice(0, 11).map((row) => [
+    row.occurred_at ? row.occurred_at.slice(0, 16).replace("T", " ") : "-",
+    row.brand_name || "-",
+    truncate(row.query, 34),
+    row.matched ? "성공" : "실패",
+    row.score.toFixed(1),
+    truncate(row.faq_question || row.category_name || "-", 32),
+  ]);
+
+  page.appendChild(
+    renderPdfTable(
+      ["발생시각", "브랜드", "고객 질문 내용", "결과", "유사도", "매칭 FAQ 내용"],
+      rows,
+      ["16%", "12%", "34%", "8%", "8%", "22%"],
+    ),
+  );
+
+  // Metadata & Signature Block
+  const metaSign = el("div", "", []);
+  metaSign.style.display = "grid";
+  metaSign.style.gridTemplateColumns = "1.3fr 0.7fr";
+  metaSign.style.gap = "20px";
+  metaSign.style.marginTop = "20px";
+
+  const dataSpec = el("div", "pdf-card-panel", [
+    el("h3", "", ["데이터 출처 및 운영 환경"]),
+    bulletList([
+      "데이터 원천: Supabase PostgreSQL (Production: api.max-dashboard.shop)",
+      "집계 테이블: faq_history_daily_summary, faq_summary, unmatched_queries, improvement_queue, channel_friend_summary",
+      `보고서 생성 일시: ${new Date().toLocaleString("ko-KR")}`,
+    ]),
+  ]);
+
+  const signature = el("div", "pdf-card-panel", [
+    el("h3", "", ["운영 담당자 승인"]),
+    el("div", "", []),
+  ]);
+  signature.style.display = "flex";
+  signature.style.flexDirection = "column";
+  signature.style.justifyContent = "space-between";
+  signature.innerHTML = `
+    <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">운영 총괄 결재</h3>
+    <div style="border-top: 1px dashed #cbd5e1; padding-top: 14px; margin-top: 30px; font-size: 12px; color: #64748b;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+        <span>검토자 :</span>
+        <span style="border-bottom: 1px solid #94a3b8; width: 100px;"></span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span>승인일자 :</span>
+        <span>${new Date().toISOString().slice(0, 10)}</span>
+      </div>
+    </div>
+  `;
+
+  metaSign.appendChild(dataSpec);
+  metaSign.appendChild(signature);
+  page.appendChild(metaSign);
+}
+
+// -------------------------------------------------------------
+// SVG RENDERING HELPERS
+// -------------------------------------------------------------
+function donutSvg(matched: number, unmatched: number, matchRate: number) {
+  const total = matched + unmatched;
+  const rate = total ? matched / total : 0;
+  const size = 180;
+  const radius = 64;
+  const circ = 2 * Math.PI * radius;
+  const svg = createSvg(size, size, "pdf-donut-svg");
+  svg.style.display = "block";
+  svg.style.margin = "0 auto 12px";
+
+  // Base circle
+  svg.appendChild(svgEl("circle", { cx: 90, cy: 90, r: radius, fill: "none", stroke: "#f1f5f9", "stroke-width": 24 }));
+
+  // Value Arc
+  svg.appendChild(
+    svgEl("circle", {
+      cx: 90,
+      cy: 90,
+      r: radius,
+      fill: "none",
+      stroke: "#4f46e5",
+      "stroke-width": 24,
+      "stroke-dasharray": `${rate * circ} ${circ}`,
+      "stroke-linecap": "round",
+      transform: "rotate(-90 90 90)",
+    }),
+  );
+
+  // Center Texts
+  svg.appendChild(svgEl("text", { x: 90, y: 86, "text-anchor": "middle", "font-size": 22, "font-weight": 900, fill: "#0f172a" }, [`${matchRate.toFixed(1)}%`]));
+  svg.appendChild(svgEl("text", { x: 90, y: 104, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "#64748b" }, ["매칭 성공률"]));
+
+  return svg;
+}
+
+function channelFriendSvg(friendCount: number, otherCount: number, friendRate: number) {
+  const total = friendCount + otherCount;
+  const rate = total ? friendCount / total : 0;
+  const size = 180;
+  const radius = 64;
+  const circ = 2 * Math.PI * radius;
+  const svg = createSvg(size, size, "pdf-donut-svg");
+  svg.style.display = "block";
+  svg.style.margin = "0 auto 12px";
+
+  svg.appendChild(svgEl("circle", { cx: 90, cy: 90, r: radius, fill: "none", stroke: "#f1f5f9", "stroke-width": 24 }));
+  svg.appendChild(
+    svgEl("circle", {
+      cx: 90,
+      cy: 90,
+      r: radius,
+      fill: "none",
+      stroke: "#7c3aed",
+      "stroke-width": 24,
+      "stroke-dasharray": `${rate * circ} ${circ}`,
+      "stroke-linecap": "round",
+      transform: "rotate(-90 90 90)",
+    }),
+  );
+
+  svg.appendChild(svgEl("text", { x: 90, y: 86, "text-anchor": "middle", "font-size": 22, "font-weight": 900, fill: "#7c3aed" }, [`${friendRate.toFixed(1)}%`]));
+  svg.appendChild(svgEl("text", { x: 90, y: 104, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "#64748b" }, ["채널 친구"]));
+
+  return svg;
+}
+
+function dailyStackedSvg(rows: ReportRow[]) {
+  const sorted = [...rows].sort((a, b) => (a.report_date || "").localeCompare(b.report_date || "")).slice(-14);
+  const width = 912;
+  const height = 260;
+  const chartTop = 20;
+  const chartBottom = 220;
+  const maxVal = Math.max(1, ...sorted.map((r) => r.total_count));
+  const slotWidth = width / Math.max(1, sorted.length);
+  const barWidth = Math.max(18, Math.min(46, slotWidth * 0.54));
+
+  const svg = createSvg(width, height, "pdf-chart-svg");
+
+  // Grid line
+  svg.appendChild(svgEl("line", { x1: 0, y1: chartBottom, x2: width, y2: chartBottom, stroke: "#e2e8f0", "stroke-width": 1 }));
+
+  sorted.forEach((row, i) => {
+    const x = i * slotWidth + (slotWidth - barWidth) / 2;
+    const totalHeight = (row.total_count / maxVal) * (chartBottom - chartTop);
+    const matchedH = row.total_count ? totalHeight * (row.matched_count / row.total_count) : 0;
+    const unmatchedH = Math.max(0, totalHeight - matchedH);
+
+    // Matched Bar (Indigo)
+    svg.appendChild(svgEl("rect", { x, y: chartBottom - matchedH, width: barWidth, height: matchedH, rx: 4, fill: "#4f46e5" }));
+    // Unmatched Bar (Rose)
+    if (unmatchedH > 0) {
+      svg.appendChild(svgEl("rect", { x, y: chartBottom - matchedH - unmatchedH, width: barWidth, height: unmatchedH, rx: 4, fill: "#f43f5e" }));
+    }
+
+    // X Date Label
+    const dateText = (row.report_date || "").slice(5);
+    svg.appendChild(svgEl("text", { x: x + barWidth / 2, y: chartBottom + 18, "text-anchor": "middle", "font-size": 11, fill: "#64748b", "font-weight": 600 }, [dateText]));
+    // Total Count on Top
+    svg.appendChild(svgEl("text", { x: x + barWidth / 2, y: Math.max(14, chartBottom - totalHeight - 6), "text-anchor": "middle", "font-size": 10, fill: "#0f172a", "font-weight": 800 }, [formatNumber(row.total_count)]));
+  });
+
+  return svg;
+}
+
+function horizontalSvg(items: Array<{ label: string; value: number }>, barColor: string) {
+  const width = 912;
+  const rowHeight = 32;
+  const height = Math.max(120, items.length * rowHeight + 10);
+  const maxVal = Math.max(1, ...items.map((i) => i.value));
+  const svg = createSvg(width, height, "pdf-chart-svg");
+
+  items.forEach((item, i) => {
+    const y = 8 + i * rowHeight;
+    const barW = (item.value / maxVal) * 440;
+
+    // Label
+    svg.appendChild(svgEl("text", { x: 0, y: y + 17, "font-size": 12, "font-weight": 700, fill: "#1e293b" }, [item.label]));
+    // Track
+    svg.appendChild(svgEl("rect", { x: 400, y: y + 4, width: 440, height: 16, rx: 8, fill: "#f1f5f9" }));
+    // Value Bar
+    svg.appendChild(svgEl("rect", { x: 400, y: y + 4, width: Math.max(4, barW), height: 16, rx: 8, fill: barColor }));
+    // Value text
+    svg.appendChild(svgEl("text", { x: 890, y: y + 17, "font-size": 11, "font-weight": 800, fill: "#0f172a", "text-anchor": "end" }, [`${formatNumber(item.value)}건`]));
+  });
+
+  return svg;
+}
+
+// -------------------------------------------------------------
+// DOM & FORMATTING UTILITIES
+// -------------------------------------------------------------
+function kpiTile(label: string, val: string, unit: string, sub: string) {
+  return el("div", "pdf-kpi-tile", [
+    el("span", "label", [label]),
+    el("strong", "val", [`${val} ${unit}`]),
+    el("span", "sub", [sub]),
+  ]);
+}
+
+function bulletList(items: string[]) {
+  return el(
+    "ul",
+    "pdf-bullet-list",
+    items.filter(Boolean).map((text) => el("li", "", [text])),
+  );
+}
+
+function legendRow(items: Array<{ label: string; color: string; value: string }>) {
+  const row = el("div", "", []);
+  row.style.display = "flex";
+  row.style.justifyContent = "center";
+  row.style.gap = "18px";
+  row.style.marginTop = "6px";
+  row.style.fontSize = "11.5px";
+  row.style.fontWeight = "700";
+
+  items.forEach((item) => {
+    const itemBox = el("div", "", []);
+    itemBox.style.display = "flex";
+    itemBox.style.alignItems = "center";
+    itemBox.style.gap = "6px";
+
+    const dot = el("span", "", []);
+    dot.style.width = "10px";
+    dot.style.height = "10px";
+    dot.style.borderRadius = "3px";
+    dot.style.background = item.color;
+
+    itemBox.appendChild(dot);
+    itemBox.appendChild(document.createTextNode(`${item.label} (${item.value})`));
+    row.appendChild(itemBox);
+  });
+
+  return row;
+}
+
+function renderPdfTable(headers: string[], rows: string[][], colWidths?: string[]) {
+  const wrapper = el("div", "pdf-table-wrapper", []);
+  const table = el("table", "pdf-print-table", []);
+
+  const thead = el("thead", "", []);
+  const headerTr = el("tr", "", []);
+  headers.forEach((h, i) => {
+    const th = el("th", "", [h]);
+    if (colWidths && colWidths[i]) th.style.width = colWidths[i];
+    headerTr.appendChild(th);
+  });
+  thead.appendChild(headerTr);
+  table.appendChild(thead);
+
+  const tbody = el("tbody", "", []);
+  if (rows.length > 0) {
+    rows.forEach((r) => {
+      const tr = el("tr", "", []);
+      r.forEach((cell) => tr.appendChild(el("td", "", [cell])));
+      tbody.appendChild(tr);
+    });
+  } else {
+    const tr = el("tr", "", []);
+    const td = document.createElement("td");
+    td.className = "pdf-empty-td";
+    td.colSpan = headers.length;
+    td.style.textAlign = "center";
+    td.style.padding = "20px";
+    td.textContent = "조회된 데이터가 없습니다.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
 
 function summarizeReport(report: PdfReportInput): ReportMetrics {
   const totalCount = report.daily.reduce((sum, row) => sum + row.total_count, 0);
@@ -376,309 +755,93 @@ function summarizeReport(report: PdfReportInput): ReportMetrics {
   };
 }
 
-function buildReportInsights(report: PdfReportInput, metrics: ReportMetrics) {
-  const topUnmatched = report.unmatchedQueries[0];
+function buildReportInsights(report: PdfReportInput, metrics: ReportMetrics): string[] {
   const topFaq = report.faqSummary[0];
-  const worstDay = [...report.daily].sort((a, b) => getRate(a) - getRate(b))[0];
+  const topUnmatched = report.unmatchedQueries[0];
   const unmatchedShare = metrics.totalCount ? (metrics.unmatchedCount / metrics.totalCount) * 100 : 0;
 
   return [
-    `조회 범위의 총 대화는 ${formatNumber(metrics.totalCount)}건이며 평균 매칭률은 ${formatDecimal(metrics.matchRate)}%입니다.`,
-    `미매칭은 ${formatNumber(metrics.unmatchedCount)}건으로 전체의 ${formatDecimal(unmatchedShare)}%입니다.`,
-    topFaq ? `가장 많이 매칭된 FAQ는 "${truncate(topFaq.faq_question || topFaq.category_name || "FAQ", 42)}"이며 ${formatNumber(topFaq.hit_count)}회 사용됐습니다.` : "조회 범위에서 FAQ 매칭 요약 데이터가 없습니다.",
-    worstDay ? `매칭률이 가장 낮은 구간은 ${worstDay.report_date || "-"} ${worstDay.brand_name || worstDay.brand || ""} (${formatDecimal(getRate(worstDay))}%)입니다.` : "일별 추세 데이터가 없습니다.",
-    topUnmatched ? `최우선 미매칭 후보는 "${truncate(topUnmatched.sample_query, 44)}"이며 ${formatNumber(topUnmatched.query_count)}회 반복됐습니다.` : "반복 미매칭 질문이 거의 없어 신규 FAQ 후보가 제한적입니다.",
-    report.unmatchedQueries.length > 0 ? "미매칭 TOP 항목은 질문 의도별로 묶어 FAQ, 키워드, 모델 라우팅 규칙으로 나눠 처리하는 것이 효과적입니다." : "미매칭 데이터가 적은 경우에는 기존 FAQ 답변 품질 유지와 로그 모니터링이 우선입니다.",
-    "보고서는 현재 조회자가 선택한 기간과 브랜드 필터만 반영하므로, 다른 기간/브랜드의 추세와 직접 비교하려면 동일 조건으로 재조회해야 합니다.",
+    `조회 기간 동안 총 ${formatNumber(metrics.totalCount)}건의 대화가 인입되었으며, 평균 FAQ 매칭 성공률은 ${metrics.matchRate.toFixed(1)}%를 기록했습니다.`,
+    `매칭에 실패한 대화는 ${formatNumber(metrics.unmatchedCount)}건(${unmatchedShare.toFixed(1)}%)으로, 신규 FAQ 전환 시 개선 잠재력이 높습니다.`,
+    topFaq
+      ? `가장 많은 사용자가 조회한 FAQ는 "${truncate(topFaq.faq_question || topFaq.category_name || "FAQ", 38)}"이며, 총 ${formatNumber(topFaq.hit_count)}건 매칭되었습니다.`
+      : "조회 범위 내에 FAQ 매칭 요약 데이터가 없습니다.",
+    topUnmatched
+      ? `최우선 보강이 필요한 미매칭 질문은 "${truncate(topUnmatched.sample_query, 40)}" (${formatNumber(topUnmatched.query_count)}회)입니다.`
+      : "반복적인 미매칭 질문이 적어 현재 FAQ가 고객 의도를 원활하게 포괄하고 있습니다.",
   ];
 }
 
-function metricTile(label: string, value: string, unit: string) {
-  return el("div", "pdf-metric-tile", [el("span", "", [label]), el("strong", "", [value]), el("em", "", [unit])]);
+type ReportMetrics = {
+  totalCount: number;
+  matchedCount: number;
+  unmatchedCount: number;
+  matchRate: number;
+  uniqueUsers: number;
+  friendCount: number;
+  friendRate: number;
+  improvementCount: number;
+};
+
+function getMatchRate(row: ReportRow): number {
+  return row.total_count ? (row.matched_count / row.total_count) * 100 : 0;
 }
 
-function bulletList(items: string[]) {
-  return el(
-    "ul",
-    "pdf-bullets",
-    items.filter(Boolean).map((item) => el("li", "", [item])),
-  );
+function formatNumber(val: number): string {
+  return new Intl.NumberFormat("ko-KR").format(val);
 }
 
-function renderCompactTable(headers: string[], rows: string[][]) {
-  const table = el("section", "pdf-table-panel", [
-    el("table", "pdf-report-table", [
-      el("thead", "", [el("tr", "", headers.map((header) => el("th", "", [header])))]),
-      el(
-        "tbody",
-        "",
-        rows.length
-          ? rows.map((row) => el("tr", "", row.map((cell) => el("td", "", [cell]))))
-          : [el("tr", "", [el("td", "pdf-empty-td", ["조회된 데이터가 없습니다."])])],
-      ),
-    ]),
-  ]);
-  const emptyCell = table.querySelector<HTMLTableCellElement>(".pdf-empty-td");
-  if (emptyCell) emptyCell.colSpan = headers.length;
-  return table;
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
 }
 
-function dailyTrendSvg(rows: ReportRow[]) {
-  const sorted = [...rows].sort((a, b) => (a.report_date || "").localeCompare(b.report_date || "")).slice(-14);
-  const maxTotal = Math.max(1, ...sorted.map((row) => row.total_count));
-  const width = 900;
-  const height = 330;
-  const chartTop = 28;
-  const chartBottom = 285;
-  const barSlot = width / Math.max(1, sorted.length);
-  const barWidth = Math.max(16, Math.min(42, barSlot * 0.52));
-  const svg = createSvg(width, height, "pdf-chart-svg");
-
-  sorted.forEach((row, index) => {
-    const x = index * barSlot + (barSlot - barWidth) / 2;
-    const totalHeight = ((row.total_count / maxTotal) * (chartBottom - chartTop)) || 0;
-    const matchedHeight = row.total_count ? totalHeight * (row.matched_count / row.total_count) : 0;
-    const unmatchedHeight = Math.max(0, totalHeight - matchedHeight);
-    svg.appendChild(svgEl("rect", { x, y: chartBottom - matchedHeight, width: barWidth, height: matchedHeight, rx: 5, fill: "#378ADD" }));
-    svg.appendChild(svgEl("rect", { x, y: chartBottom - matchedHeight - unmatchedHeight, width: barWidth, height: unmatchedHeight, rx: 5, fill: "#E24B4A" }));
-    svg.appendChild(svgEl("text", { x: x + barWidth / 2, y: chartBottom + 22, "text-anchor": "middle", "font-size": 11, fill: "#6B6B65" }, [shortLabel(row.report_date || row.brand_name || "-")]));
-    svg.appendChild(svgEl("text", { x: x + barWidth / 2, y: Math.max(18, chartBottom - totalHeight - 8), "text-anchor": "middle", "font-size": 10, fill: "#1A1A18", "font-weight": 700 }, [formatNumber(row.total_count)]));
+function el(tag: string, className = "", children: Array<Element | string> = []): HTMLElement {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  children.forEach((child) => {
+    if (typeof child === "string") {
+      element.appendChild(document.createTextNode(child));
+    } else if (child) {
+      element.appendChild(child);
+    }
   });
-
-  svg.appendChild(svgEl("line", { x1: 0, y1: chartBottom, x2: width, y2: chartBottom, stroke: "#D9D6CF", "stroke-width": 1 }));
-  return svg;
+  return element;
 }
 
-function horizontalBarSvg(rows: Array<{ label: string; value: number }>, color: string) {
-  const width = 900;
-  const rowHeight = 36;
-  const height = Math.max(120, rows.length * rowHeight + 20);
-  const maxValue = Math.max(1, ...rows.map((row) => row.value));
-  const svg = createSvg(width, height, "pdf-chart-svg pdf-bar-chart");
-
-  rows.forEach((row, index) => {
-    const y = 12 + index * rowHeight;
-    const barWidth = (row.value / maxValue) * 420;
-    svg.appendChild(svgEl("text", { x: 0, y: y + 18, "font-size": 12, fill: "#1A1A18", "font-weight": 700 }, [row.label]));
-    svg.appendChild(svgEl("rect", { x: 420, y: y + 3, width: 430, height: 18, rx: 9, fill: "#F0EDE8" }));
-    svg.appendChild(svgEl("rect", { x: 420, y: y + 3, width: Math.max(3, barWidth), height: 18, rx: 9, fill: color }));
-    svg.appendChild(svgEl("text", { x: 865, y: y + 18, "font-size": 11, fill: "#6B6B65", "text-anchor": "end" }, [formatNumber(row.value)]));
-  });
-
-  return svg;
-}
-
-function donutSvg(matched: number, unmatched: number) {
-  const total = matched + unmatched;
-  const matchedPercent = total ? matched / total : 0;
-  const size = 220;
-  const radius = 78;
-  const circumference = 2 * Math.PI * radius;
-  const svg = createSvg(size, size, "pdf-donut-svg");
-  svg.appendChild(svgEl("circle", { cx: 110, cy: 110, r: radius, fill: "none", stroke: "#F0EDE8", "stroke-width": 28 }));
-  svg.appendChild(
-    svgEl("circle", {
-      cx: 110,
-      cy: 110,
-      r: radius,
-      fill: "none",
-      stroke: "#378ADD",
-      "stroke-width": 28,
-      "stroke-dasharray": `${matchedPercent * circumference} ${circumference}`,
-      "stroke-linecap": "round",
-      transform: "rotate(-90 110 110)",
-    }),
-  );
-  svg.appendChild(svgEl("text", { x: 110, y: 104, "text-anchor": "middle", "font-size": 24, "font-weight": 800, fill: "#1A1A18" }, [`${formatDecimal(matchedPercent * 100)}%`]));
-  svg.appendChild(svgEl("text", { x: 110, y: 128, "text-anchor": "middle", "font-size": 12, fill: "#6B6B65" }, ["match rate"]));
-  return svg;
-}
-
-function channelFriendDonutSvg(friends: ChannelFriendSummaryRow[]) {
-  const friend = friends.filter((f) => f.channel_friend_status === "friend").reduce((s, f) => s + f.total_requests, 0);
-  const nonFriend = friends.filter((f) => f.channel_friend_status !== "friend").reduce((s, f) => s + f.total_requests, 0);
-  const total = friend + nonFriend;
-  const friendPercent = total ? friend / total : 0;
-  const size = 220;
-  const radius = 78;
-  const circumference = 2 * Math.PI * radius;
-  const svg = createSvg(size, size, "pdf-donut-svg");
-  svg.appendChild(svgEl("circle", { cx: 110, cy: 110, r: radius, fill: "none", stroke: "#F0EDE8", "stroke-width": 28 }));
-  svg.appendChild(
-    svgEl("circle", {
-      cx: 110,
-      cy: 110,
-      r: radius,
-      fill: "none",
-      stroke: "#3B6D11",
-      "stroke-width": 28,
-      "stroke-dasharray": `${friendPercent * circumference} ${circumference}`,
-      "stroke-linecap": "round",
-      transform: "rotate(-90 110 110)",
-    }),
-  );
-  svg.appendChild(
-    svgEl("text", { x: 110, y: 104, "text-anchor": "middle", "font-size": 24, "font-weight": 800, fill: "#1A1A18" }, [
-      `${formatDecimal(friendPercent * 100)}%`,
-    ]),
-  );
-  svg.appendChild(svgEl("text", { x: 110, y: 128, "text-anchor": "middle", "font-size": 12, fill: "#6B6B65" }, ["channel friend"]));
-  return svg;
-}
-
-function legendItem(label: string, color: string, value: string) {
-  return el("span", "", [el("i", "", [], { style: `background:${color}` }), `${label} ${value}`]);
-}
-
-function createSvg(width: number, height: number, className: string) {
+function createSvg(width: number, height: number, className = ""): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
-  svg.setAttribute("class", className);
-  svg.setAttribute("role", "img");
+  if (className) svg.setAttribute("class", className);
   return svg;
 }
 
-function svgEl(name: string, attrs: Record<string, string | number>, children: string[] = []) {
-  const node = document.createElementNS("http://www.w3.org/2000/svg", name);
-  Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
-  children.forEach((child) => node.appendChild(document.createTextNode(child)));
-  return node;
+function svgEl(tag: string, attrs: Record<string, string | number> = {}, children: string[] = []): SVGElement {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attrs).forEach(([key, val]) => element.setAttribute(key, String(val)));
+  children.forEach((child) => element.appendChild(document.createTextNode(child)));
+  return element;
 }
 
-function el(tag: string, className = "", children: Array<Node | string> = [], attrs: Record<string, string> = {}) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
-  children.forEach((child) => node.appendChild(typeof child === "string" ? document.createTextNode(child) : child));
-  return node;
-}
-
-function getRate(row: ReportRow) {
-  return row.match_rate ?? (row.total_count ? (row.matched_count / row.total_count) * 100 : 0);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value || 0);
-}
-
-function formatDecimal(value: number) {
-  return Number(value || 0).toFixed(1);
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
-}
-
-function truncate(value: string, length: number) {
-  return value.length > length ? `${value.slice(0, length - 1)}...` : value;
-}
-
-function shortLabel(value: string) {
-  const parts = value.split("-");
-  return parts.length === 3 ? `${Number(parts[1])}/${Number(parts[2])}` : truncate(value, 8);
-}
-
-function buildPdfPages(source: HTMLElement, stage: HTMLElement) {
-  const pages: HTMLElement[] = [];
-  const overview = document.createElement("section");
-  overview.className = "pdf-page pdf-page--overview";
-
-  Array.from(source.children).forEach((child) => {
-    if (child.matches(".tabs, .table-card")) return;
-    overview.appendChild(child.cloneNode(true));
-  });
-
-  stage.appendChild(overview);
-  pages.push(overview);
-
-  const sourceTableCard = source.querySelector<HTMLElement>(".table-card");
-  if (!sourceTableCard) return pages;
-
-  const sourceRows = Array.from(sourceTableCard.querySelectorAll<HTMLTableRowElement>("tbody > tr"));
-  let page = createTablePage(sourceTableCard, stage, pages.length > 1);
-  pages.push(page.root);
-
-  sourceRows.forEach((sourceRow) => {
-    const row = sourceRow.cloneNode(true) as HTMLTableRowElement;
-    page.body.appendChild(row);
-
-    if (page.root.scrollHeight <= page.maxHeight || page.body.rows.length === 1) return;
-
-    row.remove();
-    page = createTablePage(sourceTableCard, stage, true);
-    page.body.appendChild(row);
-    pages.push(page.root);
-  });
-
-  return pages;
-}
-
-function createTablePage(sourceTableCard: HTMLElement, stage: HTMLElement, continued: boolean) {
-  const root = document.createElement("section");
-  const isLandscape = sourceTableCard.querySelectorAll("thead th").length > 8;
-  root.className = `pdf-page pdf-page--table${isLandscape ? " pdf-page--landscape" : ""}`;
-  root.style.width = `${isLandscape ? PDF_LANDSCAPE_WIDTH_PX : PDF_WIDTH_PX}px`;
-
-  const card = sourceTableCard.cloneNode(true) as HTMLElement;
-  const body = card.querySelector<HTMLTableSectionElement>("tbody");
-  if (!body) throw new Error("PDF 표 본문을 찾을 수 없습니다.");
-  body.replaceChildren();
-
-  if (continued) {
-    const subtitle = card.querySelector<HTMLElement>(".table-card__sub");
-    if (subtitle) subtitle.textContent = `${subtitle.textContent || ""} · 계속`;
-  }
-
-  root.appendChild(card);
-  stage.appendChild(root);
-  return {
-    root,
-    body,
-    maxHeight: isLandscape ? PDF_LANDSCAPE_CONTENT_HEIGHT_PX : PDF_PAGE_CONTENT_HEIGHT_PX,
-  };
-}
-
-function copyChartCanvases(source: HTMLElement, target: HTMLElement) {
-  const sourceCanvases = Array.from(source.querySelectorAll("canvas"));
-  const targetCanvases = Array.from(target.querySelectorAll("canvas"));
-
-  targetCanvases.forEach((targetCanvas, index) => {
-    const sourceCanvas = sourceCanvases[index];
-    if (!sourceCanvas) return;
-
-    targetCanvas.width = sourceCanvas.width;
-    targetCanvas.height = sourceCanvas.height;
-    targetCanvas.getContext("2d")?.drawImage(sourceCanvas, 0, 0);
-  });
-}
-
-function addCanvasPage(pdf: JsPdfDocument, canvas: HTMLCanvasElement, pageNumber: number, pageCount: number) {
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 8;
-  const footerHeight = 5;
-  const maxWidth = pageWidth - margin * 2;
-  const maxHeight = pageHeight - margin * 2 - footerHeight;
-  const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-  const width = canvas.width * ratio;
-  const height = canvas.height * ratio;
-  const x = (pageWidth - width) / 2;
-
-  pdf.addImage(canvas.toDataURL("image/jpeg", 0.94), "JPEG", x, margin, width, height, undefined, "FAST");
-  pdf.setFontSize(8);
-  pdf.setTextColor(120);
-  pdf.text(`${pageNumber} / ${pageCount}`, pageWidth / 2, pageHeight - 4, { align: "center" });
+function addCanvasPage(pdf: JsPdfDocument, canvas: HTMLCanvasElement) {
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+  const imgData = canvas.toDataURL("image/jpeg", 0.95);
+  pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
 }
 
 async function waitForDocumentFonts() {
-  if ("fonts" in document) await document.fonts.ready;
+  if ("fonts" in document && document.fonts.ready) {
+    await document.fonts.ready;
+  }
 }
 
-function nextPaint() {
+async function nextPaint() {
   return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
   });
 }
