@@ -33,6 +33,7 @@ import {
   type HistoryRow,
 } from "@/lib/report";
 import { exportDashboardPdf } from "@/lib/pdf-export";
+import { downloadUnmatchedCsv, copyUnmatchedSummaryText, copySingleQueryText } from "@/lib/export-utils";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
 
@@ -102,6 +103,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -221,6 +223,33 @@ export default function Home() {
     }
   }
 
+  // Send Daily Briefing Email to on_gv@gatevision.co.kr
+  async function triggerEmailReport() {
+    setError("");
+    setNotice("");
+    setIsSendingEmail(true);
+
+    try {
+      const params = new URLSearchParams();
+      if (brand.trim()) params.set("brand", brand.trim());
+
+      const response = await fetch(`/api/email/daily-report?${params.toString()}`, {
+        method: "POST",
+      });
+      const payload = (await response.json()) as { success: boolean; message?: string; error?: string };
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "이메일 발송에 실패했습니다.");
+      }
+
+      setNotice(payload.message || "on_gv@gatevision.co.kr로 이메일 브리핑이 발송되었습니다!");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이메일 발송 중 오류가 발생했습니다.");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }
+
   const summary = useMemo(() => summarize(data), [data]);
 
   return (
@@ -258,6 +287,8 @@ export default function Home() {
         onLoad={loadDashboard}
         onExport={exportPdf}
         canExport={Boolean(data)}
+        onSendEmail={triggerEmailReport}
+        isSendingEmail={isSendingEmail}
       />
 
       {/* Error & Toast Banners */}
@@ -519,6 +550,46 @@ export default function Home() {
               title="미매칭 질문 분석 (faq_history_unmatched_queries)"
               rows={filterRows(data.unmatchedQueries, searchQuery, ["brand_name", "sample_query", "menu_id"])}
               columns={unmatchedColumns}
+              headerActions={
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-csv"
+                    onClick={() => {
+                      try {
+                        downloadUnmatchedCsv(data.unmatchedQueries, {
+                          brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
+                          from,
+                          to,
+                        });
+                        setNotice("CS팀용 엑셀(CSV) 다운로드가 완료되었습니다.");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "다운로드 실패");
+                      }
+                    }}
+                  >
+                    📥 CS팀용 엑셀 다운로드
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-copy"
+                    onClick={async () => {
+                      try {
+                        await copyUnmatchedSummaryText(data.unmatchedQueries, {
+                          brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
+                          from,
+                          to,
+                        });
+                        setNotice("메신저 공유용 요약 텍스트가 클립보드에 복사되었습니다. (Ctrl+V로 붙여넣기)");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "복사 실패");
+                      }
+                    }}
+                  >
+                    📋 메신저 요약 복사
+                  </button>
+                </>
+              }
             />
           )}
           {activeTab === "improvement" && (
@@ -526,6 +597,46 @@ export default function Home() {
               title="FAQ 개선 대기열 (faq_history_improvement_queue)"
               rows={filterRows(data.improvementQueue, searchQuery, ["brand_name", "sample_query", "menu_id", "result_type"])}
               columns={improvementColumns}
+              headerActions={
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-csv"
+                    onClick={() => {
+                      try {
+                        downloadUnmatchedCsv(data.improvementQueue, {
+                          brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
+                          from,
+                          to,
+                        });
+                        setNotice("개선 대기열 엑셀(CSV) 다운로드가 완료되었습니다.");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "다운로드 실패");
+                      }
+                    }}
+                  >
+                    📥 CS팀용 엑셀 다운로드
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-copy"
+                    onClick={async () => {
+                      try {
+                        await copyUnmatchedSummaryText(data.improvementQueue, {
+                          brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
+                          from,
+                          to,
+                        });
+                        setNotice("개선 대기열 요약 텍스트가 클립보드에 복사되었습니다. (Ctrl+V로 붙여넣기)");
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "복사 실패");
+                      }
+                    }}
+                  >
+                    📋 메신저 요약 복사
+                  </button>
+                </>
+              }
             />
           )}
           {activeTab === "channelFriend" && (
@@ -600,6 +711,8 @@ function FilterPanel({
   onLoad,
   onExport,
   canExport,
+  onSendEmail,
+  isSendingEmail,
 }: {
   from: string;
   to: string;
@@ -617,6 +730,8 @@ function FilterPanel({
   onLoad: () => void;
   onExport: () => void;
   canExport: boolean;
+  onSendEmail: () => void;
+  isSendingEmail: boolean;
 }) {
   return (
     <section className="filter-card">
@@ -664,6 +779,13 @@ function FilterPanel({
               <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
             </svg>
             {isLoading ? "데이터 조회 중..." : "DB 데이터 조회"}
+          </button>
+          <button className="btn btn-email" type="button" onClick={onSendEmail} disabled={isSendingEmail}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            {isSendingEmail ? "이메일 발송 중..." : "이메일 브리핑 전송"}
           </button>
           <button className="btn btn-pdf" type="button" onClick={onExport} disabled={!canExport}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -816,10 +938,12 @@ function DataTable<T extends Record<string, unknown>>({
   title,
   rows,
   columns,
+  headerActions,
 }: {
   title: string;
   rows: T[];
   columns: Array<Column<T>>;
+  headerActions?: React.ReactNode;
 }) {
   return (
     <div className="data-table-card">
@@ -828,6 +952,7 @@ function DataTable<T extends Record<string, unknown>>({
           {title}
           <span className="row-count-badge">{numberFormat.format(rows.length)}건</span>
         </h4>
+        {headerActions && <div className="table-action-header-tools">{headerActions}</div>}
       </div>
       <div className="data-table-scroll">
         <table className="data-table">
@@ -1170,7 +1295,23 @@ const faqColumns: Array<Column<FaqSummaryRow>> = [
 const unmatchedColumns: Array<Column<UnmatchedQueryRow>> = [
   { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
   { key: "menu_id", label: "문의 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
-  { key: "sample_query", label: "고객 질문", render: (r) => <span className="query-cell">{r.sample_query}</span> },
+  {
+    key: "sample_query",
+    label: "고객 질문",
+    render: (r) => (
+      <span className="query-cell">
+        {r.sample_query}
+        <button
+          type="button"
+          className="copy-inline-btn"
+          title="질문 텍스트 복사"
+          onClick={() => void copySingleQueryText(r.sample_query)}
+        >
+          복사
+        </button>
+      </span>
+    ),
+  },
   { key: "query_count", label: "발생 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
   { key: "unique_user_count", label: "사용자수", render: (r) => numberFormat.format(r.unique_user_count) },
   { key: "last_occurred_at", label: "최근 발생 일시", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
@@ -1188,7 +1329,23 @@ const improvementColumns: Array<Column<ImprovementQueueRow>> = [
     ),
   },
   { key: "menu_id", label: "문의 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
-  { key: "sample_query", label: "대표 질문", render: (r) => <span className="query-cell">{r.sample_query}</span> },
+  {
+    key: "sample_query",
+    label: "대표 질문",
+    render: (r) => (
+      <span className="query-cell">
+        {r.sample_query}
+        <button
+          type="button"
+          className="copy-inline-btn"
+          title="질문 텍스트 복사"
+          onClick={() => void copySingleQueryText(r.sample_query)}
+        >
+          복사
+        </button>
+      </span>
+    ),
+  },
   { key: "query_count", label: "발생 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
   { key: "unique_user_count", label: "사용자수", render: (r) => numberFormat.format(r.unique_user_count) },
   {

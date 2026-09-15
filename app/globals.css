@@ -291,6 +291,74 @@ button {
   border-color: #fda4af;
 }
 
+.btn-email {
+  background: #ffffff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-email:hover:not(:disabled) {
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+}
+
+.btn-csv {
+  background: #ffffff;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  box-shadow: var(--shadow-xs);
+  padding: 6px 12px;
+  font-size: 0.775rem;
+}
+
+.btn-csv:hover:not(:disabled) {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+}
+
+.btn-copy {
+  background: #ffffff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+  box-shadow: var(--shadow-xs);
+  padding: 6px 12px;
+  font-size: 0.775rem;
+}
+
+.btn-copy:hover:not(:disabled) {
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+}
+
+.table-action-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-sub);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  margin-left: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  vertical-align: middle;
+}
+
+.copy-inline-btn:hover {
+  color: var(--brand);
+  background: var(--brand-light);
+  border-color: var(--brand);
+}
+
 .filter-inputs-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
