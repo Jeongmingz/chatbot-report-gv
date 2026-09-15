@@ -33,6 +33,7 @@ import {
   type HistoryRow,
 } from "@/lib/report";
 import { exportDashboardPdf } from "@/lib/pdf-export";
+import { ReportPreviewModal } from "@/app/components/report-preview-modal";
 import { downloadUnmatchedCsv, copyUnmatchedSummaryText, copySingleQueryText } from "@/lib/export-utils";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
@@ -103,6 +104,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -189,38 +191,11 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // High-Resolution PDF Export
-  async function exportPdf() {
-    const target = document.getElementById("pdfContent");
-    if (!target || !data) return;
-
+  // Open High-Resolution C-Level Report Preview & Vector Print Modal
+  function exportPdf() {
+    if (!data) return;
     setError("");
-    setIsExporting(true);
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      await exportDashboardPdf(target, {
-        filename: `게이트비전_챗봇운영리포트_${today}.pdf`,
-        report: {
-          filters: {
-            from,
-            to,
-            brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드",
-            limit,
-          },
-          daily: data.daily,
-          faqSummary: data.faqSummary,
-          unmatchedQueries: data.unmatchedQueries,
-          improvementQueue: data.improvementQueue,
-          channelFriendSummary: data.channelFriendSummary,
-          history: data.history,
-        },
-      });
-      setNotice("프리미엄 C-Level 6페이지 PDF 보고서 다운로드가 완료되었습니다.");
-    } catch (err) {
-      setError(err instanceof Error ? `PDF 생성 중 오류 발생: ${err.message}` : "PDF 생성 중 오류가 발생했습니다.");
-    } finally {
-      setIsExporting(false);
-    }
+    setIsPreviewOpen(true);
   }
 
   // Send Daily Briefing Email to on_gv@gatevision.co.kr
@@ -660,6 +635,28 @@ export default function Home() {
           <h2>조회된 히스토리 데이터가 없습니다.</h2>
           <p>상단의 기간 및 브랜드 필터를 설정한 후 [DB 데이터 조회] 버튼을 눌러주세요.</p>
         </section>
+      )}
+
+      {/* C-Level Report Preview & Vector Print Modal */}
+      {data && (
+        <ReportPreviewModal
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          report={{
+            filters: {
+              from,
+              to,
+              brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드 (5대 브랜드 통합)",
+              limit,
+            },
+            daily: data.daily,
+            faqSummary: data.faqSummary,
+            unmatchedQueries: data.unmatchedQueries,
+            improvementQueue: data.improvementQueue,
+            channelFriendSummary: data.channelFriendSummary,
+            history: data.history,
+          }}
+        />
       )}
     </main>
   );
