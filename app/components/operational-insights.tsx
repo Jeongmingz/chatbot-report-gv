@@ -220,11 +220,22 @@ export function OperationalInsights({
     scales: {
       x: {
         grid: { display: false },
-        ticks: { font: { size: 10, family: "Pretendard" }, color: "#64748b" },
+        ticks: {
+          font: { size: 10, family: "Pretendard" },
+          color: "#64748b",
+          autoSkip: true,
+          maxTicksLimit: 12,
+          maxRotation: 0,
+        },
       },
       y: {
         grid: { color: "#f1f5f9" },
-        ticks: { font: { size: 10, family: "Pretendard" }, color: "#64748b", stepSize: 1 },
+        ticks: {
+          font: { size: 10, family: "Pretendard" },
+          color: "#64748b",
+          stepSize: 1,
+          maxTicksLimit: 6,
+        },
       },
     },
   };

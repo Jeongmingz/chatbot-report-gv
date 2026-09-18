@@ -702,7 +702,15 @@ button {
   background: #e2e8f0;
   border-radius: var(--radius-md);
   gap: 2px;
-  flex-wrap: wrap;
+  max-width: 100%;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.segmented-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .segmented-tab {
@@ -715,6 +723,8 @@ button {
   font-weight: 600;
   color: var(--text-muted);
   transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .segmented-tab:hover {
@@ -827,6 +837,7 @@ button {
 
 .data-table {
   width: 100%;
+  min-width: 650px;
   border-collapse: collapse;
   text-align: left;
   font-size: 0.8125rem;
@@ -1488,36 +1499,367 @@ button {
 }
 
 
-/* Responsive Media Queries */
+/* ============================================================= */
+/* COMPREHENSIVE RESPONSIVE MEDIA QUERIES (DESKTOP -> MOBILE)    */
+/* ============================================================= */
+
+/* 1. Large Tablets & Small Desktops (<= 1120px) */
 @media (max-width: 1120px) {
   .kpi-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (max-width: 768px) {
-  .app-shell {
-    padding: 1rem 1rem 3rem;
-  }
-  .filter-inputs-grid {
+/* 2. Tablets & Medium Viewports (<= 960px) */
+@media (max-width: 960px) {
+  .operational-grid {
     grid-template-columns: 1fr;
-  }
-  .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-  .tabs-control-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .table-search-input {
-    width: 100%;
   }
 }
 
+/* 3. Small Tablets & Phablets (<= 768px) */
+@media (max-width: 768px) {
+  /* Prevent iOS automatic zoom by ensuring input/select font-size >= 16px */
+  input, select {
+    font-size: 16px !important;
+  }
+
+  .app-shell {
+    padding: 0.875rem 0.75rem 3rem;
+  }
+
+  /* Top Bar */
+  .top-bar {
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .logo-area {
+    gap: 10px;
+  }
+
+  .logo-icon-box {
+    width: 38px;
+    height: 38px;
+  }
+
+  .logo-title-group h1 {
+    font-size: 1rem;
+  }
+
+  .logo-subtitle {
+    font-size: 0.725rem;
+  }
+
+  /* Filter Panel */
+  .filter-card {
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .filter-header-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .preset-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .preset-btn {
+    padding: 5px 9px;
+    font-size: 0.75rem;
+  }
+
+  .action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .btn-pdf {
+    width: 100%;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .filter-inputs-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  /* KPI Grid */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .kpi-card {
+    padding: 1rem 0.875rem;
+  }
+
+  .kpi-number {
+    font-size: 1.375rem;
+  }
+
+  /* Operational Insights Section */
+  .operational-insights-container {
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .insights-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .insights-main-title {
+    font-size: 1rem;
+  }
+
+  .insight-stat-big-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .insight-stat-sub-box {
+    text-align: left;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .stat-sub-item {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  /* Charts Grid */
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .chart-card {
+    padding: 1rem;
+  }
+
+  .chart-canvas-box {
+    height: 240px;
+  }
+
+  /* Segmented Tabs & Instant Search */
+  .tabs-control-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .table-search-box {
+    width: 100%;
+  }
+
+  .table-search-input {
+    width: 100% !important;
+  }
+
+  /* Data Table */
+  .data-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 1rem;
+  }
+
+  .table-action-header-tools {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .btn-csv, .btn-copy {
+    flex: 1;
+    min-width: 140px;
+    justify-content: center;
+    padding: 9px 12px;
+  }
+
+  .data-table-scroll {
+    max-height: 480px;
+  }
+
+  /* KPI Drilldown Modal - Mobile Fullscreen Mode */
+  .drilldown-modal-backdrop {
+    padding: 0;
+  }
+
+  .drilldown-modal-dialog {
+    width: 100%;
+    height: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .drilldown-modal-header {
+    padding: 0.875rem 1rem;
+  }
+
+  .drilldown-icon-box {
+    width: 34px;
+    height: 34px;
+    font-size: 1rem;
+  }
+
+  .drilldown-modal-title {
+    font-size: 0.95rem;
+  }
+
+  .drilldown-modal-subtitle {
+    font-size: 0.725rem;
+  }
+
+  .drilldown-header-actions {
+    gap: 6px;
+  }
+
+  .btn-drilldown-excel {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .drilldown-modal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0.75rem 1rem;
+  }
+
+  .drilldown-guide-desc {
+    font-size: 0.75rem;
+  }
+
+  .drilldown-search-wrapper {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .drilldown-table-container {
+    max-height: calc(100vh - 200px);
+  }
+
+  .drilldown-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0.875rem 1rem;
+  }
+
+  .btn-primary-close {
+    width: 100%;
+    padding: 11px;
+    font-size: 0.875rem;
+  }
+
+  /* PDF Preview Modal on Mobile */
+  .pdf-preview-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .pdf-preview-tip-box {
+    display: none;
+  }
+
+  .pdf-preview-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-preview-print, .btn-preview-close {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .pdf-preview-scroll-area {
+    padding: 14px 6px;
+  }
+}
+
+/* 4. Compact Mobile Phones (<= 480px) */
 @media (max-width: 480px) {
+  .top-bar-meta {
+    display: none;
+  }
+
+  .filter-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .kpi-card {
+    padding: 0.75rem 0.625rem;
+  }
+
+  .kpi-title {
+    font-size: 0.75rem;
+  }
+
+  .kpi-icon-pill {
+    width: 24px;
+    height: 24px;
+    font-size: 0.75rem;
+  }
+
+  .kpi-number {
+    font-size: 1.25rem;
+  }
+
+  .kpi-subtext {
+    font-size: 0.6875rem;
+  }
+
+  .kpi-click-hint {
+    font-size: 0.65rem;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .deflection-legend {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .peak-hour-highlight {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .hourly-legend-info {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* 5. Ultra-compact devices (<= 360px) */
+@media (max-width: 360px) {
   .kpi-grid {
     grid-template-columns: 1fr;
   }
