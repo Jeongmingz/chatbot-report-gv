@@ -105,7 +105,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -198,32 +197,7 @@ export default function Home() {
     setIsPreviewOpen(true);
   }
 
-  // Send Daily Briefing Email to on_gv@gatevision.co.kr
-  async function triggerEmailReport() {
-    setError("");
-    setNotice("");
-    setIsSendingEmail(true);
 
-    try {
-      const params = new URLSearchParams();
-      if (brand.trim()) params.set("brand", brand.trim());
-
-      const response = await fetch(`/api/email/daily-report?${params.toString()}`, {
-        method: "POST",
-      });
-      const payload = (await response.json()) as { success: boolean; message?: string; error?: string };
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || "이메일 발송에 실패했습니다.");
-      }
-
-      setNotice(payload.message || "on_gv@gatevision.co.kr로 이메일 브리핑이 발송되었습니다!");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "이메일 발송 중 오류가 발생했습니다.");
-    } finally {
-      setIsSendingEmail(false);
-    }
-  }
 
   const summary = useMemo(() => summarize(data), [data]);
 
@@ -262,8 +236,6 @@ export default function Home() {
         onLoad={loadDashboard}
         onExport={exportPdf}
         canExport={Boolean(data)}
-        onSendEmail={triggerEmailReport}
-        isSendingEmail={isSendingEmail}
       />
 
       {/* Error & Toast Banners */}
@@ -708,8 +680,6 @@ function FilterPanel({
   onLoad,
   onExport,
   canExport,
-  onSendEmail,
-  isSendingEmail,
 }: {
   from: string;
   to: string;
@@ -727,8 +697,6 @@ function FilterPanel({
   onLoad: () => void;
   onExport: () => void;
   canExport: boolean;
-  onSendEmail: () => void;
-  isSendingEmail: boolean;
 }) {
   return (
     <section className="filter-card">
@@ -777,13 +745,6 @@ function FilterPanel({
             </svg>
             {isLoading ? "데이터 조회 중..." : "DB 데이터 조회"}
           </button>
-          <button className="btn btn-email" type="button" onClick={onSendEmail} disabled={isSendingEmail}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-              <polyline points="22,6 12,13 2,6" />
-            </svg>
-            {isSendingEmail ? "이메일 발송 중..." : "이메일 브리핑 전송"}
-          </button>
           <button className="btn btn-pdf" type="button" onClick={onExport} disabled={!canExport}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -792,7 +753,7 @@ function FilterPanel({
               <line x1="16" y1="17" x2="8" y2="17" />
               <polyline points="10 9 9 9 8 9" />
             </svg>
-            C-Level PDF 리포트
+            PDF 리포트
           </button>
         </div>
       </div>
