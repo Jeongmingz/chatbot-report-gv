@@ -585,7 +585,7 @@ function renderAppendix(container: HTMLElement, report: PdfReportInput) {
     el("h3", "", ["데이터 출처 및 운영 환경"]),
     bulletList([
       "데이터 원천: Supabase PostgreSQL (Production: api.max-dashboard.shop)",
-      "집계 테이블: faq_history_daily_summary, faq_summary, unmatched_queries, improvement_queue, channel_friend_summary",
+      "집계 데이터 소스: 일별 챗봇 운영 현황, FAQ 성과, 미매칭 질문, 우선 개선 대기열, 카카오 채널 친구 분석",
       `보고서 생성 일시: ${new Date().toLocaleString("ko-KR")}`,
       "보안 등급: Confidential • 내부 검토용 (외부 유출 엄금)",
     ]),

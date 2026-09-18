@@ -69,7 +69,7 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
             </svg>
           </div>
           <div>
-            <h1 className="pdf-preview-title">Gatevision C-Level 챗봇 운영 보고서</h1>
+            <h1 className="pdf-preview-title">게이트비전 챗봇 운영 종합 보고서</h1>
             <p className="pdf-preview-sub">
               {report.filters.brandLabel} • 조회기간: {report.filters.from} ~ {report.filters.to} (총 6페이지)
             </p>

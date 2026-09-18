@@ -34,6 +34,8 @@ import {
 } from "@/lib/report";
 import { exportDashboardPdf } from "@/lib/pdf-export";
 import { ReportPreviewModal } from "@/app/components/report-preview-modal";
+import { KpiDrilldownModal, type KpiDrilldownType } from "@/app/components/kpi-drilldown-modal";
+import { OperationalInsights } from "@/app/components/operational-insights";
 import { downloadUnmatchedCsv, copyUnmatchedSummaryText, copySingleQueryText } from "@/lib/export-utils";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
@@ -105,6 +107,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [drilldownType, setDrilldownType] = useState<KpiDrilldownType | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -269,6 +272,7 @@ export default function Home() {
               theme="indigo"
               percent={100}
               icon="💬"
+              onClick={() => setDrilldownType("total")}
             />
             <KpiCard
               title="매칭 성공"
@@ -278,6 +282,7 @@ export default function Home() {
               theme="blue"
               percent={summary.matchRate}
               icon="🎯"
+              onClick={() => setDrilldownType("matched")}
             />
             <KpiCard
               title="매칭 실패"
@@ -287,6 +292,7 @@ export default function Home() {
               theme="rose"
               percent={summary.totalCount ? (summary.unmatchedCount / summary.totalCount) * 100 : 0}
               icon="⚠️"
+              onClick={() => setDrilldownType("unmatched")}
             />
             <KpiCard
               title="평균 매칭률"
@@ -296,6 +302,7 @@ export default function Home() {
               theme={summary.matchRate >= 80 ? "emerald" : summary.matchRate >= 60 ? "amber" : "rose"}
               percent={summary.matchRate}
               icon="📈"
+              onClick={() => setDrilldownType("rate")}
             />
             <KpiCard
               title="채널 친구 대화"
@@ -305,6 +312,7 @@ export default function Home() {
               theme="purple"
               percent={summary.friendRate}
               icon="👥"
+              onClick={() => setDrilldownType("friend")}
             />
             <KpiCard
               title="개선 시급 질문"
@@ -314,8 +322,18 @@ export default function Home() {
               theme={summary.improvementCount > 0 ? "amber" : "emerald"}
               percent={summary.improvementCount > 0 ? Math.min(100, summary.improvementCount * 5) : 0}
               icon="⚡"
+              onClick={() => setDrilldownType("improvement")}
             />
           </div>
+
+          {/* Operational Practitioner Insights */}
+          <OperationalInsights
+            history={data.history}
+            faqSummary={data.faqSummary}
+            unmatchedQueries={data.unmatchedQueries}
+            channelFriendSummary={data.channelFriendSummary}
+            totalCount={summary.totalCount}
+          />
 
           {/* Charts Row 1: 대화량 추세 & 매칭 현황 도넛 */}
           <div className="charts-grid">
@@ -323,7 +341,7 @@ export default function Home() {
               <div className="chart-header">
                 <div className="chart-title-group">
                   <h3>일자별 대화량 추이</h3>
-                  <p>일별 매칭 성공(Indigo) 및 미매칭(Rose) 볼륨 비교</p>
+                  <p>일자별 자동 응답 성공 건과 미매칭 인입량 비교</p>
                 </div>
               </div>
               <div className="chart-canvas-box">
@@ -353,7 +371,7 @@ export default function Home() {
               <div className="chart-header">
                 <div className="chart-title-group">
                   <h3>일자별 매칭률 추이 (%)</h3>
-                  <p>스무스 베지에 곡선과 80% 목표선</p>
+                  <p>안정적 응답 품질 기준(80%) 대비 일자별 추이</p>
                 </div>
               </div>
               <div className="chart-canvas-box">
@@ -365,7 +383,7 @@ export default function Home() {
               <div className="chart-header">
                 <div className="chart-title-group">
                   <h3>카카오톡 채널 친구 구성</h3>
-                  <p>채널 친구 vs 비친구 유입 비중</p>
+                  <p>카카오톡 채널 친구 여부에 따른 문의 유입 비율</p>
                 </div>
               </div>
               <div className="chart-canvas-box">
@@ -383,7 +401,7 @@ export default function Home() {
               <div className="chart-header">
                 <div className="chart-title-group">
                   <h3>FAQ 개선 대기열 TOP 5</h3>
-                  <p>미매칭 및 저신뢰도(60점 미만) 최우선 보강 질문</p>
+                  <p>고객 인입 빈도가 높으나 AI 답변 신뢰도가 낮아 즉시 보강이 필요한 질문</p>
                 </div>
               </div>
               <ImprovementRankList rows={data.improvementQueue.slice(0, 5)} />
@@ -393,7 +411,7 @@ export default function Home() {
               <div className="chart-header">
                 <div className="chart-title-group">
                   <h3>상위 미매칭 질문 TOP 5</h3>
-                  <p>빈도수가 높은 낙오 질문 목록</p>
+                  <p>기존 FAQ로 처리되지 못해 상담원 확인이 빈번한 상위 문의</p>
                 </div>
               </div>
               <UnmatchedRankList rows={data.unmatchedQueries.slice(0, 5)} />
@@ -408,7 +426,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "daily" ? "active" : ""}`}
                 onClick={() => setActiveTab("daily")}
               >
-                일일 요약
+                일별 운영 현황
                 <span className="tab-badge">{data.daily.length}</span>
               </button>
               <button
@@ -416,7 +434,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "faq" ? "active" : ""}`}
                 onClick={() => setActiveTab("faq")}
               >
-                FAQ 매칭 성과
+                FAQ별 응답 성과
                 <span className="tab-badge">{data.faqSummary.length}</span>
               </button>
               <button
@@ -424,7 +442,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "unmatched" ? "active" : ""}`}
                 onClick={() => setActiveTab("unmatched")}
               >
-                미매칭 질문
+                미매칭 고객 문의
                 <span className="tab-badge">{data.unmatchedQueries.length}</span>
               </button>
               <button
@@ -432,7 +450,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "improvement" ? "active" : ""}`}
                 onClick={() => setActiveTab("improvement")}
               >
-                개선 대기열
+                우선 개선 필요 문의
                 <span className="tab-badge">{data.improvementQueue.length}</span>
               </button>
               <button
@@ -440,7 +458,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "channelFriend" ? "active" : ""}`}
                 onClick={() => setActiveTab("channelFriend")}
               >
-                채널 친구 분석
+                채널 친구 유입 분석
                 <span className="tab-badge">{data.channelFriendSummary.length}</span>
               </button>
               <button
@@ -448,7 +466,7 @@ export default function Home() {
                 className={`segmented-tab ${activeTab === "history" ? "active" : ""}`}
                 onClick={() => setActiveTab("history")}
               >
-                원본 히스토리
+                상담 대화 원본 로그
                 <span className="tab-badge">{data.history.length}</span>
               </button>
             </div>
@@ -477,21 +495,21 @@ export default function Home() {
           {/* Active Data Table */}
           {activeTab === "daily" && (
             <DataTable
-              title="일일 대화 및 매칭 요약 (faq_history_daily_summary)"
+              title="일별 챗봇 운영 성과 내역"
               rows={filterRows(data.daily, searchQuery, ["report_date", "brand_name", "brand"])}
               columns={dailyColumns}
             />
           )}
           {activeTab === "faq" && (
             <DataTable
-              title="FAQ별 매칭 성과 (faq_history_faq_summary)"
+              title="FAQ별 고객 응답 성과 내역"
               rows={filterRows(data.faqSummary, searchQuery, ["brand_name", "category_name", "faq_question"])}
               columns={faqColumns}
             />
           )}
           {activeTab === "unmatched" && (
             <DataTable
-              title="미매칭 질문 분석 (faq_history_unmatched_queries)"
+              title="미매칭 고객 문의 상세 내역"
               rows={filterRows(data.unmatchedQueries, searchQuery, ["brand_name", "sample_query", "menu_id"])}
               columns={unmatchedColumns}
               headerActions={
@@ -538,7 +556,7 @@ export default function Home() {
           )}
           {activeTab === "improvement" && (
             <DataTable
-              title="FAQ 개선 대기열 (faq_history_improvement_queue)"
+              title="우선 보강 필요 질문 대기열"
               rows={filterRows(data.improvementQueue, searchQuery, ["brand_name", "sample_query", "menu_id", "result_type"])}
               columns={improvementColumns}
               headerActions={
@@ -585,14 +603,14 @@ export default function Home() {
           )}
           {activeTab === "channelFriend" && (
             <DataTable
-              title="카카오톡 채널 친구 요약 (faq_history_channel_friend_summary)"
+              title="카카오톡 채널 친구 유입 및 성과 분석"
               rows={filterRows(data.channelFriendSummary, searchQuery, ["brand_name", "channel_friend_status"])}
               columns={channelFriendColumns}
             />
           )}
           {activeTab === "history" && (
             <DataTable
-              title="대화 원본 히스토리 로그 (faq_history)"
+              title="실시간 상담 대화 원본 로그"
               rows={filterRows(data.history, searchQuery, ["brand_name", "query", "faq_question", "category_name"])}
               columns={historyColumns}
             />
@@ -601,9 +619,22 @@ export default function Home() {
       ) : (
         <section className="dashboard-empty">
           <div className="dashboard-empty-icon">📊</div>
-          <h2>조회된 히스토리 데이터가 없습니다.</h2>
-          <p>상단의 기간 및 브랜드 필터를 설정한 후 [DB 데이터 조회] 버튼을 눌러주세요.</p>
+          <h2>조회된 상담 대화 데이터가 없습니다.</h2>
+          <p>상단의 기간 프리셋이나 날짜, 브랜드 필터를 변경해보세요.</p>
         </section>
+      )}
+
+      {/* KPI Drilldown Detail & Excel Export Modal */}
+      {data && (
+        <KpiDrilldownModal
+          isOpen={Boolean(drilldownType)}
+          onClose={() => setDrilldownType(null)}
+          type={drilldownType}
+          brandLabel={brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드 (5대 브랜드 통합)"}
+          from={from}
+          to={to}
+          data={data}
+        />
       )}
 
       {/* C-Level Report Preview & Vector Print Modal */}
@@ -795,6 +826,7 @@ function KpiCard({
   theme,
   percent,
   icon,
+  onClick,
 }: {
   title: string;
   value: string;
@@ -803,9 +835,21 @@ function KpiCard({
   theme: "indigo" | "blue" | "emerald" | "amber" | "rose" | "purple";
   percent: number;
   icon: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className={`kpi-card theme-${theme}`}>
+    <div
+      className={`kpi-card theme-${theme} ${onClick ? "clickable" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
       <div>
         <div className="kpi-header">
           <span className="kpi-title">{title}</span>
@@ -821,6 +865,12 @@ function KpiCard({
         <div className="kpi-progress">
           <div className="kpi-progress-bar" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
         </div>
+        {onClick && (
+          <div className="kpi-click-hint">
+            <span>상세 내역 / 엑셀</span>
+            <span>↗</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1212,50 +1262,50 @@ function channelFriendDoughnutChart(friends: ChannelFriendSummaryRow[]) {
 
 // Table Column Definitions
 const dailyColumns: Array<Column<ReportRow>> = [
-  { key: "report_date", label: "일자", render: (r) => <strong>{r.report_date}</strong> },
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name || r.brand}</span> },
-  { key: "total_count", label: "총 대화수", render: (r) => numberFormat.format(r.total_count) },
-  { key: "matched_count", label: "매칭 성공", render: (r) => <span style={{ color: "#2563eb", fontWeight: 700 }}>{numberFormat.format(r.matched_count)}</span> },
-  { key: "unmatched_count", label: "매칭 실패", render: (r) => <span style={{ color: "#e11d48", fontWeight: 700 }}>{numberFormat.format(r.unmatched_count)}</span> },
+  { key: "report_date", label: "운영 일자", render: (r) => <strong>{r.report_date}</strong> },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name || r.brand}</span> },
+  { key: "total_count", label: "총 문의 인입량", render: (r) => numberFormat.format(r.total_count) },
+  { key: "matched_count", label: "자동 응답 성공", render: (r) => <span style={{ color: "#2563eb", fontWeight: 700 }}>{numberFormat.format(r.matched_count)}</span> },
+  { key: "unmatched_count", label: "미매칭(답변 불가)", render: (r) => <span style={{ color: "#e11d48", fontWeight: 700 }}>{numberFormat.format(r.unmatched_count)}</span> },
   {
     key: "match_rate",
-    label: "매칭률",
+    label: "응답 성공률",
     render: (r) => {
       const rate = matchRate(r);
       const tone = rate >= 80 ? "success" : rate >= 60 ? "warning" : "danger";
       return <span className={`status-pill ${tone}`}>{rate.toFixed(1)}%</span>;
     },
   },
-  { key: "unique_user_count", label: "방문자수", render: (r) => numberFormat.format(r.unique_user_count || 0) },
+  { key: "unique_user_count", label: "고객 방문자 수", render: (r) => numberFormat.format(r.unique_user_count || 0) },
 ];
 
 const faqColumns: Array<Column<FaqSummaryRow>> = [
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
-  { key: "category_name", label: "카테고리", render: (r) => r.category_name || "-" },
-  { key: "faq_question", label: "FAQ 질문", render: (r) => <span className="query-cell">{r.faq_question || "-"}</span> },
-  { key: "hit_count", label: "매칭 건수", render: (r) => <strong style={{ color: "#4f46e5" }}>{numberFormat.format(r.hit_count)}</strong> },
-  { key: "unique_user_count", label: "사용자수", render: (r) => numberFormat.format(r.unique_user_count) },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
+  { key: "category_name", label: "문의 카테고리", render: (r) => r.category_name || "-" },
+  { key: "faq_question", label: "매칭된 표준 FAQ 답변", render: (r) => <span className="query-cell">{r.faq_question || "-"}</span> },
+  { key: "hit_count", label: "응답 안내 건수", render: (r) => <strong style={{ color: "#4f46e5" }}>{numberFormat.format(r.hit_count)}</strong> },
+  { key: "unique_user_count", label: "문의 고객 수", render: (r) => numberFormat.format(r.unique_user_count) },
   {
     key: "avg_score",
-    label: "평균 유사도",
+    label: "AI 답변 적합도",
     render: (r) => (r.avg_score !== null ? `${r.avg_score.toFixed(1)}점` : "-"),
   },
-  { key: "last_occurred_at", label: "최근 매칭 일시", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
+  { key: "last_occurred_at", label: "최근 응답 시각", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
 ];
 
 const unmatchedColumns: Array<Column<UnmatchedQueryRow>> = [
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
-  { key: "menu_id", label: "문의 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
+  { key: "menu_id", label: "고객 선택 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
   {
     key: "sample_query",
-    label: "고객 질문",
+    label: "고객 문의 내용",
     render: (r) => (
       <span className="query-cell">
         {r.sample_query}
         <button
           type="button"
           className="copy-inline-btn"
-          title="질문 텍스트 복사"
+          title="문의 내용 복사"
           onClick={() => void copySingleQueryText(r.sample_query)}
         >
           복사
@@ -1263,26 +1313,26 @@ const unmatchedColumns: Array<Column<UnmatchedQueryRow>> = [
       </span>
     ),
   },
-  { key: "query_count", label: "발생 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
-  { key: "unique_user_count", label: "사용자수", render: (r) => numberFormat.format(r.unique_user_count) },
-  { key: "last_occurred_at", label: "최근 발생 일시", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
+  { key: "query_count", label: "누적 인입 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
+  { key: "unique_user_count", label: "문의 고객 수", render: (r) => numberFormat.format(r.unique_user_count) },
+  { key: "last_occurred_at", label: "최근 인입 시각", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
 ];
 
 const improvementColumns: Array<Column<ImprovementQueueRow>> = [
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
   {
     key: "result_type",
-    label: "구분",
+    label: "개선 분류",
     render: (r) => (
       <span className={`status-pill ${r.result_type === "unmatched" ? "danger" : "warning"}`}>
         {resultTypeLabel(r.result_type)}
       </span>
     ),
   },
-  { key: "menu_id", label: "문의 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
+  { key: "menu_id", label: "고객 선택 메뉴", render: (r) => (r.menu_id ? <span className="status-pill neutral">{supportMenuLabel(r.menu_id)}</span> : "-") },
   {
     key: "sample_query",
-    label: "대표 질문",
+    label: "고객 대표 질문",
     render: (r) => (
       <span className="query-cell">
         {r.sample_query}
@@ -1297,37 +1347,37 @@ const improvementColumns: Array<Column<ImprovementQueueRow>> = [
       </span>
     ),
   },
-  { key: "query_count", label: "발생 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
-  { key: "unique_user_count", label: "사용자수", render: (r) => numberFormat.format(r.unique_user_count) },
+  { key: "query_count", label: "누적 인입 건수", render: (r) => <strong style={{ color: "#e11d48" }}>{numberFormat.format(r.query_count)}</strong> },
+  { key: "unique_user_count", label: "문의 고객 수", render: (r) => numberFormat.format(r.unique_user_count) },
   {
     key: "avg_score",
-    label: "평균 점수",
+    label: "평균 신뢰도 점수",
     render: (r) => {
       if (r.avg_score === null || r.avg_score === undefined) return "-";
       const tone = confidenceTone(r.avg_score);
       return <span className={`status-pill ${tone}`}>{r.avg_score.toFixed(1)}점</span>;
     },
   },
-  { key: "last_occurred_at", label: "최근 발생 일시", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
+  { key: "last_occurred_at", label: "최근 인입 시각", render: (r) => (r.last_occurred_at ? r.last_occurred_at.slice(0, 16).replace("T", " ") : "-") },
 ];
 
 const channelFriendColumns: Array<Column<ChannelFriendSummaryRow>> = [
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
   {
     key: "channel_friend_status",
-    label: "친구 상태",
+    label: "카카오 채널 친구 여부",
     render: (r) => {
       const tone = channelFriendTone(r.channel_friend_status);
       return <span className={`status-pill ${tone}`}>{channelFriendStatusLabel(r.channel_friend_status)}</span>;
     },
   },
-  { key: "total_requests", label: "총 요청수", render: (r) => numberFormat.format(r.total_requests) },
-  { key: "unique_users", label: "사용자수", render: (r) => numberFormat.format(r.unique_users) },
-  { key: "matched_requests", label: "매칭 성공", render: (r) => numberFormat.format(r.matched_requests) },
-  { key: "unmatched_requests", label: "매칭 실패", render: (r) => numberFormat.format(r.unmatched_requests) },
+  { key: "total_requests", label: "총 문의 건수", render: (r) => numberFormat.format(r.total_requests) },
+  { key: "unique_users", label: "문의 고객 수", render: (r) => numberFormat.format(r.unique_users) },
+  { key: "matched_requests", label: "자동 응답 성공", render: (r) => numberFormat.format(r.matched_requests) },
+  { key: "unmatched_requests", label: "미매칭(답변 불가)", render: (r) => numberFormat.format(r.unmatched_requests) },
   {
     key: "match_rate_pct",
-    label: "매칭률",
+    label: "응답 성공률",
     render: (r) => {
       const tone = r.match_rate_pct >= 80 ? "success" : r.match_rate_pct >= 60 ? "warning" : "danger";
       return <span className={`status-pill ${tone}`}>{r.match_rate_pct.toFixed(1)}%</span>;
@@ -1335,7 +1385,7 @@ const channelFriendColumns: Array<Column<ChannelFriendSummaryRow>> = [
   },
   {
     key: "avg_score",
-    label: "평균 점수",
+    label: "평균 신뢰도 점수",
     render: (r) => (r.avg_score !== null && r.avg_score !== undefined ? `${r.avg_score.toFixed(1)}점` : "-"),
   },
 ];
@@ -1343,27 +1393,27 @@ const channelFriendColumns: Array<Column<ChannelFriendSummaryRow>> = [
 const historyColumns: Array<Column<HistoryRow>> = [
   {
     key: "occurred_at",
-    label: "일시",
+    label: "문의 시각",
     render: (r) => <span style={{ color: "#64748b", fontSize: "11px" }}>{r.occurred_at ? r.occurred_at.slice(0, 19).replace("T", " ") : "-"}</span>,
   },
-  { key: "brand_name", label: "브랜드", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
-  { key: "query", label: "고객 질문", render: (r) => <span className="query-cell">{r.query}</span> },
+  { key: "brand_name", label: "브랜드명", render: (r) => <span className="menu-badge">{r.brand_name}</span> },
+  { key: "query", label: "고객 문의 내용", render: (r) => <span className="query-cell">{r.query}</span> },
   {
     key: "matched",
-    label: "매칭 결과",
+    label: "자동 응답 결과",
     render: (r) => (
       <span className={`status-pill ${r.matched ? "success" : "danger"}`}>
-        {r.matched ? "매칭 성공" : "매칭 실패"}
+        {r.matched ? "자동 응답 성공" : "미매칭(답변 불가)"}
       </span>
     ),
   },
   {
     key: "score",
-    label: "점수",
+    label: "답변 정확도",
     render: (r) => {
       const tone = confidenceTone(r.score);
       return <span className={`status-pill ${tone}`}>{r.score.toFixed(1)}</span>;
     },
   },
-  { key: "faq_question", label: "매칭 FAQ", render: (r) => r.faq_question || r.category_name || "-" },
+  { key: "faq_question", label: "제공된 답변 (FAQ/카테고리)", render: (r) => r.faq_question || r.category_name || "-" },
 ];

@@ -7,6 +7,33 @@ export type CsvFilterMeta = {
 };
 
 /**
+ * Generic Excel-compatible CSV download utility with UTF-8 BOM (\uFEFF)
+ */
+export function downloadGenericCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+) {
+  const csvRows: string[][] = [
+    headers.map((h) => escapeCsv(h)),
+    ...rows.map((row) => row.map((cell) => escapeCsv(cell !== null && cell !== undefined ? String(cell) : ""))),
+  ];
+
+  const csvContent = "\uFEFF" + csvRows.map((r) => r.join(",")).join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const cleanFilename = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  link.setAttribute("download", cleanFilename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Download unmatched queries as Excel-compatible CSV with UTF-8 BOM.
  * Includes dedicated CS ticketing workflow columns for the support team.
  */
@@ -20,17 +47,17 @@ export function downloadUnmatchedCsv(
 
   const today = new Date().toISOString().slice(0, 10);
   const brandClean = (meta.brandLabel || "전체브랜드").replace(/[^a-zA-Z0-9가-힣]/g, "_");
-  const filename = `[게이트비전CS팀]_챗봇_미매칭질문_${brandClean}_${today}.csv`;
+  const filename = `[게이트비전CS팀]_미매칭고객문의_${brandClean}_${today}.csv`;
 
   const headers = [
     "브랜드",
-    "문의메뉴",
-    "고객 질문 (원문)",
-    "발생 횟수",
-    "최근 7일 발생건수",
-    "최근 30일 발생건수",
-    "인입 사용자수",
-    "최근 발생일시",
+    "선택 문의 메뉴",
+    "고객 문의 내용 (원문)",
+    "누적 인입 횟수",
+    "최근 7일 인입 건수",
+    "최근 30일 인입 건수",
+    "문의 고객 수",
+    "최근 문의 일시",
     "CS 분류 (제품/배송/AS/단순문의)",
     "처리 담당자",
     "조치 방안 (신규FAQ등록/상담원안내/오탈자/시스템오류)",
@@ -102,13 +129,13 @@ export async function copyUnmatchedSummaryText(
     `• 분석 기간: ${period}`,
     `• 총 미매칭 질문: ${rows.length}종 / 누적 ${rows.reduce((sum, r) => sum + (r.query_count || 0), 0)}건`,
     "",
-    "⚠️ CS팀 주목! 우선 보강이 필요한 미매칭 질문 TOP 8:",
+    "⚠️ CS팀 필독! 우선 보강이 필요한 미매칭 질문 TOP 8:",
   ];
 
   topRows.forEach((r, idx) => {
     const menu = supportMenuLabel(r.menu_id);
     lines.push(
-      `${idx + 1}. [${r.brand_name} / ${menu}] "${r.sample_query}" (${r.query_count}회 발생, 사용자 ${r.unique_user_count}명)`,
+      `${idx + 1}. [${r.brand_name} / ${menu}] "${r.sample_query}" (${r.query_count}회 발생, 문의 고객 ${r.unique_user_count}명)`,
     );
   });
 
@@ -131,7 +158,7 @@ export async function copySingleQueryText(query: string): Promise<void> {
   await navigator.clipboard.writeText(query);
 }
 
-function escapeCsv(str: string): string {
+export function escapeCsv(str: string): string {
   if (!str) return '""';
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
