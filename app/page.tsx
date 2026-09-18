@@ -332,6 +332,8 @@ export default function Home() {
             faqSummary={data.faqSummary}
             unmatchedQueries={data.unmatchedQueries}
             channelFriendSummary={data.channelFriendSummary}
+            daily={data.daily}
+            brands={brands}
             totalCount={summary.totalCount}
           />
 

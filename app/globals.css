@@ -2603,3 +2603,283 @@ button {
   border: 1px dashed var(--border);
   line-height: 1.4;
 }
+
+/* ============================================================= */
+/* EXPANDED OPERATIONAL INSIGHTS & BRAND BENCHMARK STYLES        */
+/* ============================================================= */
+.insight-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-alt);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.insight-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.insight-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.insight-tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.insight-tab-btn.active {
+  background: #ffffff;
+  color: var(--brand);
+  box-shadow: var(--shadow-sm);
+}
+
+.insight-panel-content {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Day of Week Vertical Bars */
+.day-of-week-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 140px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 14px 10px;
+  gap: 8px;
+}
+
+.dow-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.dow-bar-val {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.dow-bar-track {
+  width: 100%;
+  max-width: 24px;
+  flex: 1;
+  background: #f1f5f9;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+.dow-bar-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.4s ease;
+}
+
+.dow-bar-fill.weekday { background: #818cf8; }
+.dow-bar-fill.monday { background: #4f46e5; }
+.dow-bar-fill.weekend { background: #c084fc; }
+
+.dow-bar-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.dow-bar-label.bold-monday {
+  font-weight: 800;
+  color: #4f46e5;
+}
+
+/* Query Shape Boxes */
+.query-shape-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.query-shape-box {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.shape-title {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.shape-desc {
+  font-size: 0.725rem;
+  color: var(--text-sub);
+  margin-top: 2px;
+}
+
+.shape-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.775rem;
+  color: var(--text-muted);
+}
+
+.shape-rate-tag {
+  font-weight: 800;
+  background: #f8fafc;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+}
+
+/* Brand Benchmark Table */
+.brand-benchmark-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.benchmark-header-row {
+  margin-bottom: 1rem;
+}
+
+.benchmark-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.benchmark-subtitle {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.benchmark-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.benchmark-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.benchmark-table th {
+  background: #f8fafc;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.benchmark-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.benchmark-table tr:hover {
+  background: #f8fafc;
+}
+
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  font-size: 0.725rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+}
+
+.rank-pill.rank-1 { background: #fef3c7; color: #b45309; }
+.rank-pill.rank-2 { background: #e2e8f0; color: #475569; }
+.rank-pill.rank-3 { background: #ffedd5; color: #c2410c; }
+
+.health-score-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.grade-badge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.grade-badge.grade-S { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+.grade-badge.grade-A { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+.grade-badge.grade-B { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.grade-badge.grade-C { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
+
+.comment-pill {
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.benchmark-footer-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 1rem;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.bench-stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.775rem;
+  color: var(--text-muted);
+}
+
+.bench-stat-chip strong {
+  color: var(--brand);
+}
