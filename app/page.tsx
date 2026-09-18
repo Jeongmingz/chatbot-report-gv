@@ -13,7 +13,7 @@ import {
   Tooltip,
 } from "chart.js";
 import type { ChartOptions } from "chart.js";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import {
   brandLabel,
@@ -143,9 +143,8 @@ export default function Home() {
   }
 
   // Load Dashboard data from Supabase API
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     setError("");
-    setNotice("");
     setIsLoading(true);
 
     try {
@@ -179,16 +178,15 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [from, to, brand, limit]);
 
-  // Auto load on initial mount
+  // Auto load whenever filters (from, to, brand, limit) change with slight debounce
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadDashboard();
-    }, 0);
+    }, 150);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadDashboard]);
 
   // Open High-Resolution C-Level Report Preview & Vector Print Modal
   function exportPdf() {
@@ -233,7 +231,6 @@ export default function Home() {
         }}
         onBrandChange={setBrand}
         onLimitChange={setLimit}
-        onLoad={loadDashboard}
         onExport={exportPdf}
         canExport={Boolean(data)}
       />
@@ -677,7 +674,6 @@ function FilterPanel({
   onToChange,
   onBrandChange,
   onLimitChange,
-  onLoad,
   onExport,
   canExport,
 }: {
@@ -694,7 +690,6 @@ function FilterPanel({
   onToChange: (val: string) => void;
   onBrandChange: (val: string) => void;
   onLimitChange: (val: string) => void;
-  onLoad: () => void;
   onExport: () => void;
   canExport: boolean;
 }) {
@@ -737,14 +732,12 @@ function FilterPanel({
 
         {/* Action Buttons */}
         <div className="action-buttons">
-          <button className="btn btn-primary" type="button" onClick={onLoad} disabled={isLoading}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <ellipse cx="12" cy="5" rx="9" ry="3" />
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-            </svg>
-            {isLoading ? "데이터 조회 중..." : "DB 데이터 조회"}
-          </button>
+          {isLoading && (
+            <div className="filter-sync-indicator" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", fontWeight: 600, padding: "0 8px" }}>
+              <span className="pulse-dot" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#4f46e5", display: "inline-block" }} />
+              실시간 동기화 중...
+            </div>
+          )}
           <button className="btn btn-pdf" type="button" onClick={onExport} disabled={!canExport}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
