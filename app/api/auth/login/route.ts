@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     if (!services.includes("report")) {
       return NextResponse.json(
         {
-          error: "챗봇 리포트 대시보드 접근 권한이 없습니다. PSI 관리자(회원 관리)에게 리포트 접근 권한을 요청하세요.",
+          error: "챗봇 리포트 대시보드 접근 권한이 없습니다. 시스템 관리자에게 접근 권한을 요청하세요.",
         },
         { status: 403 }
       );
