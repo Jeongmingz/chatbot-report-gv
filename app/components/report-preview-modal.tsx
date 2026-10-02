@@ -6,6 +6,7 @@ import {
   exportDashboardPdf,
   type PdfReportInput,
 } from "@/lib/pdf-export";
+import { recordDownloadAudit } from "@/lib/audit";
 
 interface ReportPreviewModalProps {
   isOpen: boolean;
@@ -34,7 +35,19 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
 
   if (!isOpen) return null;
 
+  const getAuditConditions = () => [
+    `브랜드: ${report.filters.brandLabel || "전체"}`,
+    `기간: ${report.filters.from || "전체"} ~ ${report.filters.to || "전체"}`,
+  ];
+
   const handlePrint = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    recordDownloadAudit({
+      report_name: "챗봇 운영 종합 리포트 (PDF 인쇄/저장)",
+      export_filename: `게이트비전_챗봇운영리포트_${today}_인쇄저장.pdf`,
+      conditions: getAuditConditions(),
+      page_path: "/report",
+    });
     window.print();
   };
 
@@ -43,8 +56,18 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
     setIsExportingDirect(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
+      const filename = `게이트비전_챗봇운영리포트_${today}.pdf`;
+
+      // 감사 로그에 다운로드 이력 영구 기록
+      recordDownloadAudit({
+        report_name: "챗봇 운영 종합 리포트 (PDF 파일)",
+        export_filename: filename,
+        conditions: getAuditConditions(),
+        page_path: "/report",
+      });
+
       await exportDashboardPdf(containerRef.current, {
-        filename: `게이트비전_챗봇운영리포트_${today}.pdf`,
+        filename,
         report,
       });
     } catch (err) {
