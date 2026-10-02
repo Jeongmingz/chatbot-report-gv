@@ -110,6 +110,38 @@ export default function Home() {
   const [drilldownType, setDrilldownType] = useState<KpiDrilldownType | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [currentUser, setCurrentUser] = useState<{
+    name: string;
+    email: string;
+    role: string;
+    team: string;
+    title: string;
+  } | null>(null);
+
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.user) {
+            setCurrentUser(payload.user);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void loadUser();
+  }, []);
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/login";
+    }
+  }
 
   useEffect(() => {
     if (!notice) return;
@@ -211,7 +243,7 @@ export default function Home() {
       </div>
 
       {/* Top Bar */}
-      <TopBar />
+      <TopBar user={currentUser} onLogout={handleLogout} />
 
       {/* Filter Control Panel */}
       <FilterPanel
@@ -665,7 +697,13 @@ export default function Home() {
 }
 
 // Top Bar Component
-function TopBar() {
+function TopBar({
+  user,
+  onLogout,
+}: {
+  user: { name: string; role: string; team: string; title: string; email: string } | null;
+  onLogout: () => void;
+}) {
   return (
     <header className="top-bar">
       <div className="logo-area">
@@ -686,7 +724,37 @@ function TopBar() {
         </div>
       </div>
       <div className="top-bar-meta">
-        <span className="system-tag">Enterprise Analytics v2.0</span>
+        <div className="top-bar-right-group">
+          {user && (
+            <div className="top-bar-user-badge">
+              <div className="user-avatar-circle">
+                {user.name ? user.name[0] : "U"}
+              </div>
+              <div className="user-info-text">
+                <span className="user-name-strong">{user.name}</span>
+                {user.title && <span className="user-meta-sub">{user.title}</span>}
+                {user.team && <span className="user-meta-sub">· {user.team}</span>}
+                <span className={`user-role-chip ${user.role === "admin" ? "admin" : ""}`}>
+                  {user.role === "admin"
+                    ? "관리자"
+                    : user.role === "operator"
+                    ? "운영자"
+                    : user.role === "staff"
+                    ? "실무자"
+                    : "조회자"}
+                </span>
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={onLogout} className="logout-btn" title="로그아웃">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            로그아웃
+          </button>
+        </div>
       </div>
     </header>
   );
