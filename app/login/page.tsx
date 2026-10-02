@@ -13,7 +13,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState(() => {
     if (urlError === "unauthorized_service") {
-      return "해당 계정은 챗봇 리포트 대시보드 접근 권한이 없습니다. 관리자에게 권한을 요청하세요.";
+      return "해당 계정은 챗봇 리포트 대시보드 접근 권한이 없습니다. 영업 4팀 이정민에게 권한을 요청하세요.";
     }
     return "";
   });
@@ -152,9 +152,7 @@ function LoginForm() {
         <div className="login-info-card">
           <p className="info-title">💡 계정 및 접근 권한 안내</p>
           <p className="info-desc">
-            * 게이트비전 사내 계정(이메일/비밀번호)으로 로그인해 주세요.
-            <br />
-            * 신규 계정 발급 및 접근 권한 문의는 시스템 관리자에게 요청하세요.
+            * 신규 계정 발급 및 접근 권한 문의는 <strong>영업 4팀 이정민</strong>에게 요청하세요.
           </p>
         </div>
       </div>
