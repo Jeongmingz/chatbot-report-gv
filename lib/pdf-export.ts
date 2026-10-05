@@ -7,6 +7,12 @@ import {
   type ImprovementQueueRow,
   type ChannelFriendSummaryRow,
 } from "@/lib/report";
+import {
+  calculateBrandHealth,
+  MIN_BRAND_HEALTH_SAMPLE,
+  type BrandHealthStat,
+  type BrandOptionLike,
+} from "@/lib/brand-health";
 
 export const PDF_WIDTH_PX = 1040;
 export const PDF_PAGE_HEIGHT_PX = 1470;
@@ -24,6 +30,7 @@ export type PdfReportInput = {
     brandLabel: string;
     limit: string;
   };
+  brands?: BrandOptionLike[];
   daily: ReportRow[];
   faqSummary: PdfFaqSummaryRow[];
   unmatchedQueries: PdfUnmatchedQueryRow[];
@@ -130,8 +137,8 @@ export function buildReportPdfPages(report: PdfReportInput, stage?: HTMLElement)
     createReportPage("01. 종합 운영 성과 요약 (Executive Summary)", 1, totalPages, report, (page) =>
       renderExecutiveSummary(page, report, metrics, insights),
     ),
-    // Page 2: 5대 브랜드별 종합 성과 벤치마크 (Brand Benchmark & Health Score)
-    createReportPage("02. 5대 공식 브랜드별 종합 성과 벤치마크 (Brand Benchmark)", 2, totalPages, report, (page) =>
+    // Page 2: 실제 브랜드별 응답 건강도
+    createReportPage("02. 브랜드별 응답 건강도 (Brand Response Health)", 2, totalPages, report, (page) =>
       renderBrandBenchmark(page, report, metrics),
     ),
     // Page 3: 고객 인입 행동 및 시간대/요일별 심층 분석 (Temporal & Behavioral Insights)
@@ -240,7 +247,7 @@ function renderExecutiveSummary(container: HTMLElement, report: PdfReportInput, 
   // Left: Key Insights
   const leftPanel = el("div", "pdf-card-panel", [
     el("h3", "", ["운영 핵심 인사이트 (Key Operational Highlights)"]),
-    el("p", "section-desc", ["5대 브랜드 카카오 챗봇 질의응답 및 고객 행동 패턴 데이터 분석 요약입니다."]),
+    el("p", "section-desc", ["조회기간의 실제 브랜드 상담 기록과 고객 행동 데이터를 요약했습니다."]),
     bulletList(insights.slice(0, 4)),
   ]);
 
@@ -303,29 +310,27 @@ function renderBrandBenchmark(container: HTMLElement, report: PdfReportInput, me
 
   container.appendChild(
     el("div", "pdf-card-panel", [
-      el("h3", "", ["5대 공식 브랜드별 종합 성과 매트릭스 & 건강도 평가"]),
-      el("p", "section-desc", ["응답 성공률(50%), 채널 친구 비중(30%), 미매칭 최소화율(20%)을 종합 평가한 성과 비교표입니다."]),
+      el("h3", "", ["브랜드별 실제 응답 성과와 평가 가능 여부"]),
+      el("p", "section-desc", [`선택 기간의 실제 대화량과 응답 성공률을 사용합니다. ${MIN_BRAND_HEALTH_SAMPLE}건 미만은 표본 부족, 0건은 데이터 없음으로 표시합니다.`]),
     ]),
   );
 
   // Benchmark Table
-  const tableRows = brandStats.map((b, idx) => [
-    `${idx + 1}위`,
+  const tableRows = brandStats.map((b) => [
+    b.statusLabel,
     b.name,
     formatNumber(b.total),
     formatNumber(b.matched),
     formatNumber(b.unmatched),
     `${b.rate.toFixed(1)}%`,
-    `${formatNumber(b.friends)}건 (${b.friendRate.toFixed(1)}%)`,
-    `${b.grade}등급 (${b.healthScore}점)`,
     b.comment,
   ]);
 
   container.appendChild(
     renderPdfTable(
-      ["순위", "브랜드명", "총 문의량", "자동 응답", "미매칭", "응답 성공률", "채널 친구", "건강도 점수", "운영 진단"],
+      ["평가 상태", "브랜드명", "총 문의량", "자동 응답", "미매칭", "응답 성공률", "확인할 내용"],
       tableRows,
-      ["7%", "20%", "11%", "11%", "9%", "12%", "13%", "14%", "13%"],
+      ["12%", "21%", "11%", "12%", "10%", "13%", "21%"],
     ),
   );
 
@@ -334,7 +339,7 @@ function renderBrandBenchmark(container: HTMLElement, report: PdfReportInput, me
     el("div", "pdf-card-panel", [
       el("h3", "", ["브랜드별 대화량 점유율 및 응답 성공률 비교"]),
       horizontalSvg(
-        brandStats.map((b) => ({
+        brandStats.filter((b) => b.total > 0).map((b) => ({
           label: `${b.name} (${b.rate.toFixed(1)}%)`,
           value: b.total,
         })),
@@ -348,11 +353,11 @@ function renderBrandBenchmark(container: HTMLElement, report: PdfReportInput, me
     el("div", "pdf-highlight-box", [
       el("h4", "", ["🏆 브랜드별 원포인트 운영 전략 진단"]),
       bulletList([
-        brandStats[0]
-          ? `최다 인입 브랜드 [${brandStats[0].name}]은 총 ${formatNumber(brandStats[0].total)}건으로 전체 인입을 견인하고 있어, 메인 퀵메뉴 고도화가 우선입니다.`
-          : "브랜드별 인입량이 균등하게 분포되어 있습니다.",
-        "응답 성공률이 상대적으로 저조한 브랜드의 경우 미매칭 문의의 70%가 '소모품 구매' 및 'AS 센터 위치'에 집중되어 있으므로 해당 FAQ 확충이 시급합니다.",
-        "카카오톡 채널 친구 추가율이 높은 브랜드일수록 1회 완결률이 높게 나타나므로, 전 브랜드 공통으로 친구 추가 리워드 프로모션을 연계하십시오.",
+        brandStats.find((brand) => brand.total > 0)
+          ? `최다 인입 브랜드 [${brandStats.find((brand) => brand.total > 0)?.name}]은 총 ${formatNumber(brandStats.find((brand) => brand.total > 0)?.total || 0)}건입니다. 대화량이 많은 브랜드부터 미매칭 원문을 확인합니다.`
+          : "조회기간에 브랜드 상담 기록이 없습니다.",
+        getBrandReviewPriorityText(brandStats),
+        `총 대화량이 ${MIN_BRAND_HEALTH_SAMPLE}건 미만인 브랜드는 점수나 순위로 판단하지 않고 원문 사례를 확인합니다.`,
       ]),
     ]),
   );
@@ -605,7 +610,7 @@ function renderChannelAndAppendix(container: HTMLElement, report: PdfReportInput
     el("h3", "", ["고객 참여 분석 및 로열티"]),
     el("p", "section-desc", ["카카오톡 채널 친구 여부에 따른 고객 세그먼트별 활동 특성입니다."]),
     bulletList([
-      `전체 대화 중 채널 친구의 이용 비중은 ${metrics.friendRate.toFixed(1)}%입니다.`,
+      `채널 친구 상태가 집계된 요청 중 친구 이용 비중은 ${metrics.friendRate.toFixed(1)}%입니다.`,
       "채널 친구는 브랜드 충성도가 높은 기존 고객 비중이 높아 재방문율과 AS/소모품 문의 빈도가 높습니다.",
       "비친구 사용자는 주로 구매 전 스펙 비교나 기본 사용법 문의가 많으므로, 첫 응답 시 채널 친구 혜택을 안내하는 것이 유리합니다.",
       "카카오 싱크(Kakao Sync) 간편가입 연동 시 상세 연령대 및 성별 인구통계 분석이 가능합니다.",
@@ -949,7 +954,8 @@ export function summarizeReport(report: PdfReportInput): ReportMetrics {
 
   const friends = report.channelFriendSummary || [];
   const friendCount = friends.filter((f) => f.channel_friend_status === "friend").reduce((s, f) => s + f.total_requests, 0);
-  const friendRate = totalCount ? (friendCount / totalCount) * 100 : 0;
+  const channelRequestCount = friends.reduce((sum, row) => sum + row.total_requests, 0);
+  const friendRate = channelRequestCount ? (friendCount / channelRequestCount) * 100 : 0;
 
   const improvements = report.improvementQueue || [];
   const improvementCount = improvements.reduce((s, i) => s + i.query_count, 0);
@@ -1065,59 +1071,7 @@ export function summarizeReport(report: PdfReportInput): ReportMetrics {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  // 5 Brand Benchmark
-  const defaultBrands = [
-    { key: "dyson", name: "다이슨 (Dyson)" },
-    { key: "laurastar", name: "로라스타 (Laurastar)" },
-    { key: "imetec", name: "이메텍 (Imetec)" },
-    { key: "delonghi", name: "드롱기 (Delonghi)" },
-    { key: "bissell", name: "비쎌 (Bissell)" },
-  ];
-
-  const brandBenchmark = defaultBrands.map((b) => {
-    const bDaily = report.daily.filter((d) => (d.brand || "").toLowerCase().includes(b.key) || (d.brand_name || "").includes(b.name.split(" ")[0]));
-    const bTotal = bDaily.reduce((s, r) => s + r.total_count, 0);
-    const bMatched = bDaily.reduce((s, r) => s + r.matched_count, 0);
-    const bUnmatched = bDaily.reduce((s, r) => s + r.unmatched_count, 0);
-    const bRate = bTotal ? (bMatched / bTotal) * 100 : 0;
-
-    const bFriends = (report.channelFriendSummary || []).filter((f) => (f.brand || "").toLowerCase().includes(b.key) && f.channel_friend_status === "friend");
-    const bFriendsCount = bFriends.reduce((s, r) => s + r.total_requests, 0);
-    const bFriendRate = bTotal ? (bFriendsCount / bTotal) * 100 : 0;
-
-    const bUnmatchedPen = bTotal ? (bUnmatched / bTotal) * 100 : 0;
-    const healthScore = Math.min(100, Math.max(0, Math.round(bRate * 0.5 + bFriendRate * 0.3 + Math.max(0, 100 - bUnmatchedPen * 2) * 0.2)));
-
-    let grade = "A";
-    let comment = "안정적 운영 중";
-    if (healthScore >= 90) {
-      grade = "S";
-      comment = "최우수 품질";
-    } else if (healthScore >= 80) {
-      grade = "A";
-      comment = "우수 운영 (양호)";
-    } else if (healthScore >= 65) {
-      grade = "B";
-      comment = "FAQ 보강 권장";
-    } else {
-      grade = "C";
-      comment = "즉시 개선 필요";
-    }
-
-    return {
-      key: b.key,
-      name: b.name,
-      total: bTotal,
-      matched: bMatched,
-      unmatched: bUnmatched,
-      rate: bRate,
-      friends: bFriendsCount,
-      friendRate: bFriendRate,
-      healthScore,
-      grade,
-      comment,
-    };
-  }).sort((a, b) => b.total - a.total);
+  const brandBenchmark = calculateBrandHealth(report.daily, report.brands || []);
 
   return {
     totalCount,
@@ -1153,14 +1107,14 @@ export function summarizeReport(report: PdfReportInput): ReportMetrics {
 
 export function buildReportInsights(report: PdfReportInput, metrics: ReportMetrics): string[] {
   const topFaq = report.faqSummary[0];
-  const topBrand = metrics.brandBenchmark[0];
+  const topBrand = metrics.brandBenchmark.find((brand) => brand.total > 0);
 
   return [
     `챗봇 자체 완결률은 ${metrics.deflectionRate.toFixed(1)}%로, 상담원 연결 없이 ${formatNumber(metrics.selfCount)}건의 문의를 무인 처리하여 약 ${formatNumber(metrics.savedHours)}시간의 CS 업무를 절감했습니다.`,
     `고객 1회 완결률(FCR)은 ${metrics.fcrRate.toFixed(1)}%이며, 인입 문의가 가장 집중되는 피크 타임은 ${metrics.peakHour}시로 분석되었습니다.`,
     topBrand
-      ? `5대 브랜드 중 [${topBrand.name}]이 대화량 ${formatNumber(topBrand.total)}건(건강도 ${topBrand.healthScore}점)으로 가장 활발하게 운영되고 있습니다.`
-      : "브랜드별 인입량이 고르게 분포되어 있습니다.",
+      ? `[${topBrand.name}]의 대화량이 ${formatNumber(topBrand.total)}건으로 가장 많습니다. 응답 건강도는 ${topBrand.statusLabel} 상태입니다.`
+      : "조회기간에 브랜드별 상담 기록이 없습니다.",
     topFaq
       ? `가장 많은 사용자가 조회한 표준 FAQ는 "${truncate(topFaq.faq_question || topFaq.category_name || "FAQ", 36)}"이며, 총 ${formatNumber(topFaq.hit_count)}건 안내되었습니다.`
       : "조회 범위 내에 FAQ 매칭 요약 데이터가 없습니다.",
@@ -1195,20 +1149,20 @@ export type ReportMetrics = {
   riskRate: number;
   shortMatchRate: number;
   longMatchRate: number;
-  brandBenchmark: Array<{
-    key: string;
-    name: string;
-    total: number;
-    matched: number;
-    unmatched: number;
-    rate: number;
-    friends: number;
-    friendRate: number;
-    healthScore: number;
-    grade: string;
-    comment: string;
-  }>;
+  brandBenchmark: BrandHealthStat[];
 };
+
+function getBrandReviewPriorityText(brandStats: BrandHealthStat[]): string {
+  const priority = brandStats
+    .filter((brand) => brand.isEvaluated)
+    .sort((left, right) => left.rate - right.rate)[0];
+
+  if (!priority) {
+    return `평가 가능한 브랜드가 없습니다. 브랜드별 대화가 ${MIN_BRAND_HEALTH_SAMPLE}건 이상 쌓인 뒤 비교합니다.`;
+  }
+
+  return `[${priority.name}]의 응답 성공률은 ${priority.rate.toFixed(1)}%입니다. 미매칭 ${formatNumber(priority.unmatched)}건의 원문을 먼저 확인합니다.`;
+}
 
 function getMatchRate(row: ReportRow): number {
   return row.total_count ? (row.matched_count / row.total_count) * 100 : 0;

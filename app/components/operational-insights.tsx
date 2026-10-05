@@ -10,6 +10,11 @@ import {
   type ChannelFriendSummaryRow,
   type ReportRow,
 } from "@/lib/report";
+import {
+  calculateBrandHealth,
+  MIN_BRAND_HEALTH_SAMPLE,
+  type BrandHealthStatus,
+} from "@/lib/brand-health";
 
 interface OperationalInsightsProps {
   history: HistoryRow[];
@@ -22,6 +27,14 @@ interface OperationalInsightsProps {
 }
 
 const numberFormat = new Intl.NumberFormat("ko-KR");
+
+function brandHealthTone(status: BrandHealthStatus): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (status === "healthy") return "success";
+  if (status === "watch") return "warning";
+  if (status === "improve") return "danger";
+  if (status === "insufficient") return "info";
+  return "neutral";
+}
 
 export function OperationalInsights({
   history,
@@ -273,7 +286,8 @@ export function OperationalInsights({
     const topUnmatched = unmatchedQueries.slice(0, 3);
     const friendRow = channelFriendSummary.find((c) => c.channel_friend_status === "friend");
     const friendCount = friendRow ? friendRow.total_requests : 0;
-    const friendPct = totalCount ? (friendCount / totalCount) * 100 : 0;
+    const channelRequestCount = channelFriendSummary.reduce((sum, row) => sum + row.total_requests, 0);
+    const friendPct = channelRequestCount ? (friendCount / channelRequestCount) * 100 : 0;
 
     return {
       riskCount,
@@ -283,66 +297,19 @@ export function OperationalInsights({
       friendCount,
       friendPct,
     };
-  }, [history, unmatchedQueries, channelFriendSummary, totalCount]);
+  }, [history, unmatchedQueries, channelFriendSummary]);
 
-  // 5. 5대 브랜드 챗봇 건강도 벤치마크 (Brand Health Index)
+  // 5. 실제 등록 브랜드와 선택 기간의 일별 집계를 이용한 응답 건강도
   const brandBenchmark = useMemo(() => {
-    const defaultBrands = [
-      { key: "dyson", name: "다이슨 (Dyson)" },
-      { key: "laurastar", name: "로라스타 (Laurastar)" },
-      { key: "imetec", name: "이메텍 (Imetec)" },
-      { key: "delonghi", name: "드롱기 (Delonghi)" },
-      { key: "bissell", name: "비쎌 (Bissell)" },
-    ];
+    return calculateBrandHealth(daily, brands);
+  }, [daily, brands]);
 
-    const brandStats = defaultBrands.map((b) => {
-      const bDaily = daily.filter((d) => (d.brand || "").toLowerCase().includes(b.key) || (d.brand_name || "").includes(b.name.split(" ")[0]));
-      const total = bDaily.reduce((s, r) => s + r.total_count, 0);
-      const matched = bDaily.reduce((s, r) => s + r.matched_count, 0);
-      const unmatched = bDaily.reduce((s, r) => s + r.unmatched_count, 0);
-      const rate = total ? (matched / total) * 100 : 0;
-
-      const bFriends = channelFriendSummary.filter((f) => (f.brand || "").toLowerCase().includes(b.key) && f.channel_friend_status === "friend");
-      const friends = bFriends.reduce((s, r) => s + r.total_requests, 0);
-      const friendRate = total ? (friends / total) * 100 : 0;
-
-      // 종합 건강도 점수 (100점 만점: 매칭률 50% + 친구율 30% + 미매칭 최소화율 20%)
-      const unmatchedPen = total ? (unmatched / total) * 100 : 0;
-      const healthScore = Math.min(100, Math.max(0, Math.round(rate * 0.5 + friendRate * 0.3 + Math.max(0, 100 - unmatchedPen * 2) * 0.2)));
-
-      let grade = "A";
-      let comment = "안정적 운영 중";
-      if (healthScore >= 90) {
-        grade = "S";
-        comment = "최우수 응답 품질";
-      } else if (healthScore >= 80) {
-        grade = "A";
-        comment = "우수 운영 (양호)";
-      } else if (healthScore >= 65) {
-        grade = "B";
-        comment = "FAQ 보강 권장";
-      } else {
-        grade = "C";
-        comment = "즉시 품질 개선 필요";
-      }
-
-      return {
-        key: b.key,
-        name: b.name,
-        total,
-        matched,
-        unmatched,
-        rate,
-        friends,
-        friendRate,
-        healthScore,
-        grade,
-        comment,
-      };
-    });
-
-    return brandStats.sort((a, b) => b.total - a.total);
-  }, [daily, channelFriendSummary]);
+  const evaluatedBrands = useMemo(
+    () => brandBenchmark.filter((brand) => brand.isEvaluated),
+    [brandBenchmark],
+  );
+  const topVolumeBrand = brandBenchmark.find((brand) => brand.total > 0);
+  const reviewPriorityBrand = [...evaluatedBrands].sort((left, right) => left.rate - right.rate)[0];
 
   // 차트 옵션: 24시간대 인입 바 차트
   const hourlyChartOptions: ChartOptions<"bar"> = {
@@ -403,13 +370,13 @@ export function OperationalInsights({
       <div className="insights-section-header">
         <div className="insights-header-title-box">
           <div className="insights-badge">실무자 종합 운영 인사이트 (CS & Operations)</div>
-          <h2 className="insights-main-title">CS 실무자 및 브랜드 총괄을 위한 5대 심층 운영 분석</h2>
+          <h2 className="insights-main-title">CS 실무자 및 브랜드 총괄을 위한 운영 분석</h2>
           <p className="insights-subtext">
-            단순 수치 조회를 넘어 챗봇 자체 완결률(FCR), 요일별/시간대 집중도, 긴급 불만 레이더, 5대 브랜드 건강도를 다각도로 진단합니다.
+            챗봇 자체 완결률(FCR), 요일별·시간대 집중도, 불만 징후와 실제 브랜드별 응답 상태를 함께 확인합니다.
           </p>
         </div>
         <div className="insights-meta-pill">
-          <span>💡 5대 브랜드 실시간 행동 데이터 진단 완료</span>
+          <span>💡 선택 기간의 실제 상담 데이터 반영</span>
         </div>
       </div>
 
@@ -448,7 +415,7 @@ export function OperationalInsights({
           className={`insight-tab-btn ${activeInsightTab === "brands" ? "active" : ""}`}
           onClick={() => setActiveInsightTab("brands")}
         >
-          🏆 5대 브랜드 챗봇 건강도 벤치마크
+          🏆 브랜드별 응답 건강도
         </button>
       </div>
 
@@ -835,14 +802,16 @@ export function OperationalInsights({
         </div>
       )}
 
-      {/* Tab Content 5: 5대 브랜드 챗봇 건강도 벤치마크 */}
+      {/* Tab Content 5: 실제 브랜드별 응답 건강도 */}
       {activeInsightTab === "brands" && (
         <div className="insight-panel-content">
           <div className="brand-benchmark-card">
             <div className="benchmark-header-row">
               <div>
-                <h3 className="benchmark-title">5대 브랜드 챗봇 종합 건강도 (Brand Health Score)</h3>
-                <p className="benchmark-subtitle">응답 성공률(50%), 채널 친구 비중(30%), 미매칭 최소화율(20%)을 종합 평가한 성과 비교표입니다.</p>
+                <h3 className="benchmark-title">브랜드별 챗봇 응답 건강도</h3>
+                <p className="benchmark-subtitle">
+                  선택 기간의 실제 대화량과 응답 성공률을 사용합니다. {MIN_BRAND_HEALTH_SAMPLE}건 미만은 표본 부족, 0건은 데이터 없음으로 표시합니다.
+                </p>
               </div>
             </div>
 
@@ -850,38 +819,29 @@ export function OperationalInsights({
               <table className="benchmark-table">
                 <thead>
                   <tr>
-                    <th>순위</th>
+                    <th>평가 상태</th>
                     <th>브랜드명</th>
                     <th>총 대화량</th>
                     <th>자동 응답 성공</th>
                     <th>미매칭 건수</th>
                     <th>응답 성공률</th>
-                    <th>채널 친구수</th>
-                    <th>건강도 점수</th>
-                    <th>운영 진단</th>
+                    <th>확인할 내용</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {brandBenchmark.map((b, idx) => (
+                  {brandBenchmark.map((b) => (
                     <tr key={b.key}>
                       <td>
-                        <span className={`rank-pill rank-${idx + 1}`}>{idx + 1}</span>
+                        <span className={`status-pill ${brandHealthTone(b.status)}`}>{b.statusLabel}</span>
                       </td>
                       <td><strong>{b.name}</strong></td>
                       <td>{numberFormat.format(b.total)}건</td>
                       <td><span style={{ color: "#2563eb", fontWeight: 700 }}>{numberFormat.format(b.matched)}건</span></td>
                       <td><span style={{ color: "#e11d48", fontWeight: 700 }}>{numberFormat.format(b.unmatched)}건</span></td>
                       <td>
-                        <span className={`status-pill ${b.rate >= 80 ? "success" : b.rate >= 60 ? "warning" : "danger"}`}>
+                        <span className={`status-pill ${b.isEvaluated ? (b.rate >= 80 ? "success" : b.rate >= 60 ? "warning" : "danger") : "neutral"}`}>
                           {b.rate.toFixed(1)}%
                         </span>
-                      </td>
-                      <td>{numberFormat.format(b.friends)}건 ({b.friendRate.toFixed(1)}%)</td>
-                      <td>
-                        <div className="health-score-cell">
-                          <span className={`grade-badge grade-${b.grade}`}>{b.grade}</span>
-                          <strong>{b.healthScore}점</strong>
-                        </div>
                       </td>
                       <td>
                         <span className="comment-pill">{b.comment}</span>
@@ -895,15 +855,11 @@ export function OperationalInsights({
             <div className="benchmark-footer-summary">
               <div className="bench-stat-chip">
                 <span>최다 인입 브랜드:</span>
-                <strong>{brandBenchmark[0]?.name || "-"} ({numberFormat.format(brandBenchmark[0]?.total || 0)}건)</strong>
+                <strong>{topVolumeBrand ? `${topVolumeBrand.name} (${numberFormat.format(topVolumeBrand.total)}건)` : "데이터 없음"}</strong>
               </div>
               <div className="bench-stat-chip">
-                <span>최고 응답률 브랜드:</span>
-                <strong>
-                  {[...brandBenchmark].sort((a, b) => b.rate - a.rate)[0]?.name || "-"} (
-                  {[...brandBenchmark].sort((a, b) => b.rate - a.rate)[0]?.rate.toFixed(1) || 0}%
-                  )
-                </strong>
+                <span>점검 우선 브랜드:</span>
+                <strong>{reviewPriorityBrand ? `${reviewPriorityBrand.name} (${reviewPriorityBrand.rate.toFixed(1)}%)` : "평가 가능한 표본 없음"}</strong>
               </div>
             </div>
           </div>

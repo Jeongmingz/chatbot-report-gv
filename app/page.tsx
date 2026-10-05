@@ -340,7 +340,7 @@ export default function Home() {
               title="채널 친구 대화"
               value={numberFormat.format(summary.friendRequests)}
               unit="건"
-              subtext={`전체의 ${summary.friendRate.toFixed(1)}%`}
+              subtext={`채널 상태 집계의 ${summary.friendRate.toFixed(1)}%`}
               theme="purple"
               percent={summary.friendRate}
               icon="👥"
@@ -664,7 +664,7 @@ export default function Home() {
           isOpen={Boolean(drilldownType)}
           onClose={() => setDrilldownType(null)}
           type={drilldownType}
-          brandLabel={brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드 (5대 브랜드 통합)"}
+          brandLabel={brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드"}
           from={from}
           to={to}
           data={data}
@@ -680,9 +680,10 @@ export default function Home() {
             filters: {
               from,
               to,
-              brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드 (5대 브랜드 통합)",
+              brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드",
               limit,
             },
+            brands,
             daily: data.daily,
             faqSummary: data.faqSummary,
             unmatchedQueries: data.unmatchedQueries,
@@ -720,7 +721,7 @@ function TopBar({
               Supabase Live
             </span>
           </h1>
-          <div className="logo-subtitle">5대 브랜드 카카오 챗봇 실시간 분석 및 품질 고도화 플랫폼</div>
+          <div className="logo-subtitle">등록 브랜드 카카오 챗봇 실시간 분석 및 품질 관리 플랫폼</div>
         </div>
       </div>
       <div className="top-bar-meta">
@@ -865,7 +866,7 @@ function FilterPanel({
         <div className="input-field">
           <label>브랜드 선택</label>
           <select value={brand} onChange={(e) => onBrandChange(e.target.value)} disabled={isLoadingBrands}>
-            <option value="">전체 브랜드 (5대 브랜드 통합)</option>
+            <option value="">전체 브랜드</option>
             {brands.map((b) => (
               <option value={b.brand} key={b.brand}>
                 {b.brand_name} ({b.brand})
@@ -1121,7 +1122,8 @@ function summarize(data: DashboardData | null) {
 
   const friends = data.channelFriendSummary.filter((f) => f.channel_friend_status === "friend");
   const friendRequests = friends.reduce((sum, f) => sum + f.total_requests, 0);
-  const friendRate = totalCount ? (friendRequests / totalCount) * 100 : 0;
+  const channelRequests = data.channelFriendSummary.reduce((sum, f) => sum + f.total_requests, 0);
+  const friendRate = channelRequests ? (friendRequests / channelRequests) * 100 : 0;
 
   const improvementCount = data.improvementQueue.reduce((sum, i) => sum + i.query_count, 0);
   const improvementTypes = data.improvementQueue.length;

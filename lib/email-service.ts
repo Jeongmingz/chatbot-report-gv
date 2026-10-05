@@ -111,7 +111,8 @@ export function generateDailyEmailHtml(
 
   const friends = data.channelFriendSummary || [];
   const friendCount = friends.filter((f) => f.channel_friend_status === "friend").reduce((s, f) => s + f.total_requests, 0);
-  const friendRate = totalCount ? (friendCount / totalCount) * 100 : 0;
+  const channelRequestCount = friends.reduce((sum, row) => sum + row.total_requests, 0);
+  const friendRate = channelRequestCount ? (friendCount / channelRequestCount) * 100 : 0;
 
   const topFaqs = data.faqSummary.slice(0, 5);
   const topUnmatched = data.unmatchedQueries.slice(0, 5);
@@ -187,7 +188,7 @@ export function generateDailyEmailHtml(
           <span class="kpi-sub">${matchRate >= 80 ? "목표 달성" : "FAQ 점검 필요"}</span>
         </div>
         <div class="kpi-cell">
-          <span class="kpi-label">플친 대화 비중</span>
+          <span class="kpi-label">채널 집계 내 친구 비중</span>
           <span class="kpi-value" style="color: #7c3aed;">${friendRate.toFixed(1)}%</span>
           <span class="kpi-sub">${formatNum(friendCount)}건</span>
         </div>
