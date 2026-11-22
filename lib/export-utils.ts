@@ -1,3 +1,4 @@
+import { seoulDate } from "@/lib/report-period";
 import { supportMenuLabel, type UnmatchedQueryRow, type ImprovementQueueRow } from "@/lib/report";
 import { recordDownloadAudit } from "@/lib/audit";
 
@@ -18,14 +19,6 @@ export function downloadGenericCsv(
 ) {
   const cleanFilename = filename.endsWith(".csv") ? filename : `${filename}.csv`;
 
-  // 다운로드 감사 로그 기록
-  recordDownloadAudit({
-    report_name: auditMeta?.reportName || "챗봇 데이터 내역 (CSV)",
-    export_filename: cleanFilename,
-    conditions: auditMeta?.conditions || [],
-    page_path: "/report",
-  });
-
   const csvRows: string[][] = [
     headers.map((h) => escapeCsv(h)),
     ...rows.map((row) => row.map((cell) => escapeCsv(cell !== null && cell !== undefined ? String(cell) : ""))),
@@ -42,6 +35,12 @@ export function downloadGenericCsv(
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+  void recordDownloadAudit({
+    report_name: auditMeta?.reportName || "챗봇 데이터 내역 (CSV)",
+    export_filename: cleanFilename,
+    conditions: auditMeta?.conditions || [],
+    page_path: "/report",
+  });
 }
 
 /**
@@ -56,7 +55,7 @@ export function downloadUnmatchedCsv(
     throw new Error("다운로드할 미매칭 질문 데이터가 없습니다.");
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate();
   const brandClean = (meta.brandLabel || "전체브랜드").replace(/[^a-zA-Z0-9가-힣]/g, "_");
   const filename = `[게이트비전CS팀]_미매칭고객문의_${brandClean}_${today}.csv`;
 
@@ -66,20 +65,13 @@ export function downloadUnmatchedCsv(
     meta.from && meta.to ? `기간: ${meta.from} ~ ${meta.to}` : "",
   ].filter(Boolean);
 
-  recordDownloadAudit({
-    report_name: "미매칭 고객 문의 (CSV)",
-    export_filename: filename,
-    conditions,
-    page_path: "/report",
-  });
-
   const headers = [
     "브랜드",
     "선택 문의 메뉴",
     "고객 문의 내용 (원문)",
     "누적 인입 횟수",
-    "최근 7일 인입 건수",
-    "최근 30일 인입 건수",
+    "조회기간 내 종료일 기준 최근 7일",
+    "조회기간 내 종료일 기준 최근 30일",
     "문의 고객 수",
     "최근 문의 일시",
     "CS 분류 (제품/배송/AS/단순문의)",
@@ -129,6 +121,12 @@ export function downloadUnmatchedCsv(
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+  void recordDownloadAudit({
+    report_name: "미매칭 고객 문의 (CSV)",
+    export_filename: filename,
+    conditions,
+    page_path: "/report",
+  });
 }
 
 /**
@@ -142,7 +140,7 @@ export async function copyUnmatchedSummaryText(
     throw new Error("공유할 미매칭 질문 데이터가 없습니다.");
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = seoulDate();
   const brandName = meta.brandLabel || "전체 브랜드";
   const period = meta.from && meta.to ? `${meta.from} ~ ${meta.to}` : "최근 조회 기준";
   const topRows = rows.slice(0, 8);
@@ -183,6 +181,7 @@ export async function copySingleQueryText(query: string): Promise<void> {
 }
 
 export function escapeCsv(str: string): string {
+  if (/^[\t\r\n]/.test(str) || /^\s*[=+@-]/.test(str)) str = "'" + str;
   if (!str) return '""';
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;

@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get("next") || "/";
   const urlError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
@@ -44,7 +43,7 @@ function LoginForm() {
         }
 
         // 로그인 성공 시 대시보드로 이동
-        router.push(nextUrl);
+        router.replace("/");
         router.refresh();
       } catch {
         setErrorMessage("서버 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");

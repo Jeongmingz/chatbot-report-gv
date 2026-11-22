@@ -1,5 +1,6 @@
 "use client";
 
+import { seoulDate } from "@/lib/report-period";
 import { useEffect, useRef, useState } from "react";
 import {
   buildReportPdfPages,
@@ -17,7 +18,6 @@ interface ReportPreviewModalProps {
 export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isExportingDirect, setIsExportingDirect] = useState(false);
-  const [activePage, setActivePage] = useState(1);
 
   // Render the 6 pages into the container DOM when opened
   useEffect(() => {
@@ -41,9 +41,9 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
   ];
 
   const handlePrint = () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = seoulDate();
     recordDownloadAudit({
-      report_name: "챗봇 운영 종합 리포트 (PDF 인쇄/저장)",
+      report_name: "챗봇 운영 종합 리포트 (인쇄 요청)",
       export_filename: `게이트비전_챗봇운영리포트_${today}_인쇄저장.pdf`,
       conditions: getAuditConditions(),
       page_path: "/report",
@@ -55,20 +55,18 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
     if (!containerRef.current) return;
     setIsExportingDirect(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = seoulDate();
       const filename = `게이트비전_챗봇운영리포트_${today}.pdf`;
-
-      // 감사 로그에 다운로드 이력 영구 기록
-      recordDownloadAudit({
-        report_name: "챗봇 운영 종합 리포트 (PDF 파일)",
-        export_filename: filename,
-        conditions: getAuditConditions(),
-        page_path: "/report",
-      });
 
       await exportDashboardPdf(containerRef.current, {
         filename,
         report,
+      });
+      recordDownloadAudit({
+        report_name: "챗봇 운영 종합 리포트 (PDF 생성 완료)",
+        export_filename: filename,
+        conditions: getAuditConditions(),
+        page_path: "/report",
       });
     } catch (err) {
       alert(`PDF 다운로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);

@@ -1,3 +1,5 @@
+import { percent, type Activity } from "./period-report";
+import { seoulDate } from "./report-period";
 import type { jsPDF as JsPdfDocument } from "jspdf";
 import {
   supportMenuLabel,
@@ -24,6 +26,7 @@ export type PdfExportOptions = {
 };
 
 export type PdfReportInput = {
+  activity: Activity;
   filters: {
     from: string;
     to: string;
@@ -222,18 +225,8 @@ function renderExecutiveSummary(container: HTMLElement, report: PdfReportInput, 
         },
         "FAQ 자동 응답 성공률",
       ),
-      kpiTile(
-        "챗봇 자체 완결률",
-        `${metrics.deflectionRate.toFixed(1)}%`,
-        { text: "상담원 업무 경감", color: "#059669" },
-        "무인 자체 완결 비율",
-      ),
-      kpiTile(
-        "CS 업무 절감 효과",
-        `약 ${formatNumber(metrics.savedHours)} 시간`,
-        { text: "인건비 절감", color: "#4f46e5" },
-        "상담 대기시간 단축",
-      ),
+      kpiTile("상담원 언급 문의", formatNumber(report.activity.agentCount) + "건", undefined, "고객 질문의 키워드 기준"),
+      kpiTile("식별 고객 수", formatNumber(report.activity.users) + "명", undefined, "기간 내 중복 제외"),
     ]),
   );
 
@@ -265,41 +258,13 @@ function renderExecutiveSummary(container: HTMLElement, report: PdfReportInput, 
   twoCol.appendChild(rightPanel);
   container.appendChild(twoCol);
 
-  // Deflection Progress Box
-  const deflectionBox = el("div", "pdf-card-panel", [
-    el("h3", "", ["챗봇 무인 해결 성과 (Self-Service Deflection vs Escalation)"]),
-    el("p", "section-desc", ["전체 인입 문의 중 상담원 연결 없이 챗봇 자체로 해결된 성과 지표입니다."]),
-  ]);
-  const defBarWrap = el("div", "deflection-progress-bar-wrap", []);
-  defBarWrap.style.margin = "12px 0 8px";
-  const defSelf = el("div", "deflection-bar-self", []);
-  defSelf.style.width = `${metrics.deflectionRate}%`;
-  const defAgent = el("div", "deflection-bar-agent", []);
-  defAgent.style.width = `${metrics.escalationRate}%`;
-  defBarWrap.appendChild(defSelf);
-  defBarWrap.appendChild(defAgent);
-  deflectionBox.appendChild(defBarWrap);
-  deflectionBox.appendChild(
-    legendRow([
-      { label: "챗봇 자체 완결", color: "#059669", value: `${formatNumber(metrics.selfCount)}건 (${metrics.deflectionRate.toFixed(1)}%)` },
-      { label: "상담원 연결 인계", color: "#e11d48", value: `${formatNumber(metrics.agentCount)}건 (${metrics.escalationRate.toFixed(1)}%)` },
+  container.appendChild(el("div", "pdf-highlight-box", [
+    el("h4", "", ["개선 대상 문의"]),
+    bulletList([
+      `미매칭 또는 저신뢰도 문의는 ${formatNumber(report.activity.improvementCount)}건, ${formatNumber(report.activity.improvementTypes)}개 항목입니다.`,
+      `카카오 채널 친구로 기록된 문의는 ${formatNumber(metrics.friendCount)}건입니다.`,
     ]),
-  );
-  container.appendChild(deflectionBox);
-
-  // Priority Actions Highlight Box
-  container.appendChild(
-    el("div", "pdf-highlight-box", [
-      el("h4", "", ["🎯 경영진 제언 및 최우선 실행 과제"]),
-      bulletList([
-        `챗봇 자체 완결률 ${metrics.deflectionRate.toFixed(1)}%를 달성하여 총 ${formatNumber(metrics.savedHours)}시간의 CS 상담 리소스를 절감했습니다.`,
-        metrics.improvementCount > 0
-          ? `개선 대기열에 등록된 ${formatNumber(metrics.improvementCount)}건의 낙오 질문을 신규 FAQ로 등록하면 매칭률이 5~8%p 추가 상승할 것으로 전망됩니다.`
-          : "전체 매칭률이 80% 이상으로 안정적이므로, 현재 등록된 상위 FAQ 답변의 정확도와 친절도를 유지 관리합니다.",
-        `카카오톡 채널 친구 대화 비중(${metrics.friendRate.toFixed(1)}%) 확대를 위해 챗봇 답변 하단에 공식몰 적립금 및 보증 연장 혜택 배너를 강화하십시오.`,
-      ]),
-    ]),
-  );
+  ]));
 }
 
 // -------------------------------------------------------------
@@ -377,19 +342,18 @@ function renderBrandBenchmark(container: HTMLElement, report: PdfReportInput, me
 // PAGE 3: TEMPORAL & BEHAVIORAL INSIGHTS
 // -------------------------------------------------------------
 function renderTemporalInsights(container: HTMLElement, report: PdfReportInput, metrics: ReportMetrics) {
-  const aggregatedDaily = aggregateDailyByDate(report.daily);
+  const { activity } = report;
 
   container.appendChild(
     el("div", "pdf-card-panel", [
       el("h3", "", ["24시간대별 고객 문의 인입 패턴 및 피크타임"]),
       el("p", "section-desc", [
-        `최대 문의 집중 피크 시간대는 [${metrics.peakHour}:00 ~ ${metrics.peakHour + 1}:00]이며, 야간/휴일 무인 응대 비중은 ${metrics.nightRate.toFixed(1)}%입니다.`,
+        metrics.peakHour < 0 ? "조회 기간의 문의가 없습니다." : `가장 많은 문의가 들어온 시간은 한국 시간 ${metrics.peakHour}시이며, 09~18시 외 문의 비중은 ${percent(metrics.nightCount, metrics.totalCount)}입니다.`,
       ]),
-      hourlyDistributionSvg(metrics.hourlyCounts, metrics.peakHour),
+      hourlyDistributionSvg(activity.hours, metrics.peakHour),
     ]),
   );
 
-  // Two Column Panel: 요일별 & FCR 완결률
   const twoCol = el("div", "", []);
   twoCol.style.display = "grid";
   twoCol.style.gridTemplateColumns = "1fr 1fr";
@@ -397,20 +361,18 @@ function renderTemporalInsights(container: HTMLElement, report: PdfReportInput, 
   twoCol.style.marginBottom = "20px";
 
   const leftPanel = el("div", "pdf-card-panel", [
-    el("h3", "", ["요일별 인입 추이 (월요병 & 주말 누적)"]),
+    el("h3", "", ["요일별 문의량"]),
     bulletList([
-      `월요일 인입 비중: 전체의 ${metrics.mondayRate.toFixed(1)}% (${formatNumber(metrics.mondayCount)}건)`,
-      `주말(토·일) 챗봇 무인 처리: ${formatNumber(metrics.weekendCount)}건 (${metrics.weekendRate.toFixed(1)}%)`,
-      "주말 동안 축적된 문의가 월요일 오전 9시~11시 사이에 상담원 연결로 집중되는 패턴이 뚜렷합니다.",
+      `월요일 인입 비중: 전체의 ${percent(activity.weekdays[1], metrics.totalCount)} (${formatNumber(activity.weekdays[1])}건)`,
+      `주말(토·일) 문의: ${formatNumber(metrics.weekendCount)}건 (${percent(metrics.weekendCount, metrics.totalCount)})`,
     ]),
   ]);
 
   const rightPanel = el("div", "pdf-card-panel", [
-    el("h3", "", ["1회 완결률 (FCR, First-Contact Resolution)"]),
+    el("h3", "", ["식별 고객의 문의 빈도"]),
     bulletList([
-      `1회 질문 즉시 완결률: ${metrics.fcrRate.toFixed(1)}%`,
-      `고객 1인당 평균 질문 횟수: 약 ${metrics.avgQueriesPerUser}회`,
-      "고객 대다수가 1~2회 질의 내에 원하는 답변을 찾고 이탈 없이 상담을 완료하고 있습니다.",
+      `한 번만 문의한 고객 비중: ${percent(activity.singleUsers, activity.users)}`,
+      `식별 고객 ${formatNumber(activity.users)}명, 문의 ${formatNumber(activity.identifiedRequests)}건`,
     ]),
   ]);
 
@@ -438,15 +400,7 @@ function renderTemporalInsights(container: HTMLElement, report: PdfReportInput, 
     ),
   );
 
-  container.appendChild(
-    el("div", "pdf-highlight-box", [
-      el("h4", "", ["⏰ CS 운영 인력 스케줄링 가이드"]),
-      bulletList([
-        `일일 피크 타임(${metrics.peakHour}시) 및 월요일 오전(09:00~11:30)에 상담원을 집중 배치하여 고객 대기 시간을 최소화하십시오.`,
-        "주말 동안 챗봇 웰컴 카드에 '자주 묻는 AS 자가진단' 버튼을 노출하면 월요일 인입의 약 20%를 사전 흡수할 수 있습니다.",
-      ]),
-    ]),
-  );
+
 }
 
 // -------------------------------------------------------------
@@ -459,7 +413,7 @@ function renderCategoryAndFaq(container: HTMLElement, report: PdfReportInput, me
       el("h3", "", ["주요 고객 문의 카테고리(인텐트) 분포"]),
       el("p", "section-desc", ["고객의 질문이 주로 어떤 주제로 이루어져 있는지 분석한 비중입니다."]),
       horizontalSvg(
-        metrics.categoryRanking.map((c) => ({
+        report.activity.categories.map((c) => ({
           label: c.name,
           value: c.count,
         })),
@@ -491,7 +445,7 @@ function renderCategoryAndFaq(container: HTMLElement, report: PdfReportInput, me
     el("div", "pdf-highlight-box", [
       el("h4", "", ["💡 FAQ 답변 최적화 권고 및 고객 여정 점검"]),
       bulletList([
-        `가장 비중이 높은 '${metrics.categoryRanking[0]?.name || "주요 문의"}' 카테고리의 답변 최신성과 링크 유효성을 상시 점검하십시오.`,
+        `가장 비중이 높은 '${report.activity.categories[0]?.name || "주요 문의"}' 카테고리의 답변 최신성과 링크 유효성을 상시 점검하십시오.`,
         "AI 답변 적합도가 80점 이상으로 안정적인 질문은 표준 모범 응답으로 지정하여 품질 표준으로 활용합니다.",
         "조회수가 높은 질문은 텍스트 안내뿐 아니라 공식 서비스센터 지도 및 카카오 채팅 바로가기 버튼을 탑재하여 완결성을 극대화합니다.",
       ]),
@@ -502,7 +456,7 @@ function renderCategoryAndFaq(container: HTMLElement, report: PdfReportInput, me
     el("div", "pdf-card-panel", [
       el("h3", "", ["웰컴 블록 퀵버튼 배치 전략"]),
       bulletList([
-        "상위 1~3위 FAQ(상담원 연결, AS 접수 절차, 소모품 구매)를 카카오 챗봇 시작 화면에 고정 버튼으로 제공하여 고객 클릭 경로를 단축합니다.",
+        "조회 기간의 상위 FAQ를 카카오 챗봇 시작 화면에 고정 버튼으로 제공하여 고객 클릭 경로를 단축합니다.",
         "게이트비전 공식몰 정품 등록 페이지 및 카카오 채널 1:1 상담원 채팅 바로가기 버튼을 답변 하단에 상시 탑재하십시오.",
       ]),
     ]),
@@ -523,7 +477,7 @@ function renderRiskAndImprovement(container: HTMLElement, report: PdfReportInput
   const riskPanel = el("div", "pdf-card-panel", [
     el("h3", "", ["고객 불만 & 클레임 위험 징후 레이더 (Risk Radar)"]),
     bulletList([
-      `위험 키워드 감지: 총 ${formatNumber(metrics.riskCount)}건 (전체의 ${metrics.riskRate.toFixed(1)}%)`,
+      `위험 키워드 감지: 총 ${formatNumber(report.activity.riskCount)}건 (전체의 ${percent(report.activity.riskCount, metrics.totalCount)})`,
       "고장, 환불, 파손, 폭발, 누수, 소비자원 등 즉각적 조치가 필요한 질문을 사전 필터링합니다.",
       "불만성 질문은 고객 이탈 및 브랜드 신뢰도 하락으로 직결되므로 전담 상담원의 최우선 확인이 필요합니다.",
     ]),
@@ -532,8 +486,8 @@ function renderRiskAndImprovement(container: HTMLElement, report: PdfReportInput
   const shapePanel = el("div", "pdf-card-panel", [
     el("h3", "", ["질문 형태 분석 (단답형 vs 장문형)"]),
     bulletList([
-      `단답형 키워드(10자 미만): 매칭률 ${metrics.shortMatchRate.toFixed(1)}%`,
-      `서술형 장문(25자 이상): 매칭률 ${metrics.longMatchRate.toFixed(1)}%`,
+      `단답형 키워드(10자 이하): 매칭률 ${percent(report.activity.shortMatched, report.activity.shortCount)}`,
+      `서술형 장문(25자 이상): 매칭률 ${percent(report.activity.longMatched, report.activity.longCount)}`,
       "장문 질문의 매칭률 보완을 위해 고객이 자주 쓰는 일상 구어체(예: '충전안됨', '불안들어옴')를 동의어로 보강하십시오.",
     ]),
   ]);
@@ -611,8 +565,6 @@ function renderChannelAndAppendix(container: HTMLElement, report: PdfReportInput
     el("p", "section-desc", ["카카오톡 채널 친구 여부에 따른 고객 세그먼트별 활동 특성입니다."]),
     bulletList([
       `채널 친구 상태가 집계된 요청 중 친구 이용 비중은 ${metrics.friendRate.toFixed(1)}%입니다.`,
-      "채널 친구는 브랜드 충성도가 높은 기존 고객 비중이 높아 재방문율과 AS/소모품 문의 빈도가 높습니다.",
-      "비친구 사용자는 주로 구매 전 스펙 비교나 기본 사용법 문의가 많으므로, 첫 응답 시 채널 친구 혜택을 안내하는 것이 유리합니다.",
       "카카오 싱크(Kakao Sync) 간편가입 연동 시 상세 연령대 및 성별 인구통계 분석이 가능합니다.",
     ]),
   ]);
@@ -650,7 +602,7 @@ function renderChannelAndAppendix(container: HTMLElement, report: PdfReportInput
   const dataSpec = el("div", "pdf-card-panel", [
     el("h3", "", ["데이터 출처 및 운영 환경 명세"]),
     bulletList([
-      "데이터 원천: Supabase PostgreSQL (Production: api.max-dashboard.shop)",
+      "데이터 원천: Supabase PostgreSQL",
       "집계 데이터 소스: 일별 챗봇 운영 현황, FAQ 성과, 미매칭 질문, 우선 개선 대기열, 카카오 채널 친구 분석",
       `보고서 생성 일시: ${new Date().toLocaleString("ko-KR")}`,
       "보안 등급: Confidential • 내부 검토용 (외부 유출 엄금)",
@@ -670,7 +622,7 @@ function renderChannelAndAppendix(container: HTMLElement, report: PdfReportInput
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span>승인일자 :</span>
-        <span>${new Date().toISOString().slice(0, 10)}</span>
+        <span>${seoulDate()}</span>
       </div>
     </div>
   `;
@@ -683,7 +635,7 @@ function renderChannelAndAppendix(container: HTMLElement, report: PdfReportInput
     el("div", "pdf-highlight-box", [
       el("h4", "", ["🔒 데이터 무결성 및 개인정보 보호 고지"]),
       bulletList([
-        "본 보고서에 기록된 모든 대화 데이터는 개인정보 마스킹 처리되어 개인 식별이 불가한 상태로 집계됩니다.",
+        "고객 질문에서 이메일·전화번호·주민등록번호 형식을 가렸습니다. 이름·주소 등 자유 입력 내용은 공유 전 확인해 주세요.",
         "게이트비전 경영진 및 인가된 CS 운영 담당자 외 열람 및 복제를 금지합니다.",
       ]),
     ]),
@@ -822,7 +774,7 @@ function hourlyDistributionSvg(hours: number[], peakHour: number) {
     const isDay = h >= 9 && h < 18;
     const fill = isPeak ? "#4f46e5" : isDay ? "#818cf8" : "#cbd5e1";
 
-    svg.appendChild(svgEl("rect", { x, y: chartBottom - barH, width: barWidth, height: Math.max(3, barH), rx: 3, fill }));
+    svg.appendChild(svgEl("rect", { x, y: chartBottom - barH, width: barWidth, height: barH, rx: 3, fill }));
     if (h % 2 === 0) {
       svg.appendChild(svgEl("text", { x: x + barWidth / 2, y: chartBottom + 16, "text-anchor": "middle", "font-size": 10, fill: "#64748b", "font-weight": 600 }, [`${h}시`]));
     }
@@ -946,211 +898,37 @@ function renderPdfTable(headers: string[], rows: string[][], colWidths?: string[
   return wrapper;
 }
 
-export function summarizeReport(report: PdfReportInput): ReportMetrics {
+export function summarizeReport(report: PdfReportInput) {
   const totalCount = report.daily.reduce((sum, row) => sum + row.total_count, 0);
   const matchedCount = report.daily.reduce((sum, row) => sum + row.matched_count, 0);
   const unmatchedCount = report.daily.reduce((sum, row) => sum + row.unmatched_count, 0);
-  const uniqueUsers = report.daily.reduce((sum, row) => sum + (row.unique_user_count || 0), 0);
-
-  const friends = report.channelFriendSummary || [];
-  const friendCount = friends.filter((f) => f.channel_friend_status === "friend").reduce((s, f) => s + f.total_requests, 0);
-  const channelRequestCount = friends.reduce((sum, row) => sum + row.total_requests, 0);
-  const friendRate = channelRequestCount ? (friendCount / channelRequestCount) * 100 : 0;
-
-  const improvements = report.improvementQueue || [];
-  const improvementCount = improvements.reduce((s, i) => s + i.query_count, 0);
-
-  // 1. Deflection & Time Saved
-  const agentKeywords = ["상담원", "상담사", "직원 연결", "사람 연결", "유선 상담", "전화 상담", "전문 상담"];
-  let agentCount = 0;
-  let nightCount = 0;
-  const hours = Array.from({ length: 24 }, () => 0);
-  const dayOfWeekCounts = [0, 0, 0, 0, 0, 0, 0];
-  const userMap: Record<string, number> = {};
-  const riskKeywords = ["고장", "환불", "파손", "불량", "폭발", "연기", "소비자원", "누수", "작동안함", "신고", "피해", "교환", "취소"];
-  let riskCount = 0;
-  let shortCount = 0;
-  let shortMatched = 0;
-  let longCount = 0;
-  let longMatched = 0;
-
-  report.history.forEach((h) => {
-    const q = (h.query || "").toLowerCase();
-    const faq = (h.faq_question || "").toLowerCase();
-    const cat = (h.category_name || "").toLowerCase();
-
-    if (agentKeywords.some((kw) => q.includes(kw) || faq.includes(kw) || cat.includes(kw))) {
-      agentCount++;
-    }
-    if (riskKeywords.some((kw) => q.includes(kw))) {
-      riskCount++;
-    }
-
-    const len = (h.query || "").trim().length;
-    if (len <= 10) {
-      shortCount++;
-      if (h.matched) shortMatched++;
-    } else if (len >= 25) {
-      longCount++;
-      if (h.matched) longMatched++;
-    }
-
-    if (h.occurred_at) {
-      try {
-        let hour = -1;
-        if (h.occurred_at.includes("T")) {
-          hour = parseInt(h.occurred_at.split("T")[1].slice(0, 2), 10);
-        } else if (h.occurred_at.includes(" ")) {
-          hour = parseInt(h.occurred_at.split(" ")[1].slice(0, 2), 10);
-        }
-        if (hour >= 0 && hour < 24) {
-          hours[hour]++;
-          if (hour < 9 || hour >= 18) nightCount++;
-        }
-        const dObj = new Date(h.occurred_at);
-        if (!isNaN(dObj.getTime())) {
-          dayOfWeekCounts[dObj.getDay()]++;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const uid = (h as unknown as { user_id?: string }).user_id || `anon_${(h as unknown as { id?: number }).id || 0}`;
-    userMap[uid] = (userMap[uid] || 0) + 1;
-  });
-
-  const faqAgentHits = report.faqSummary
-    .filter((f) => agentKeywords.some((kw) => (f.faq_question || "").includes(kw) || (f.category_name || "").includes(kw)))
-    .reduce((sum, f) => sum + f.hit_count, 0);
-
-  const effectiveAgentCount = Math.max(agentCount, faqAgentHits);
-  const selfCount = Math.max(0, totalCount - effectiveAgentCount);
-  const deflectionRate = totalCount ? (selfCount / totalCount) * 100 : 100;
-  const escalationRate = totalCount ? (effectiveAgentCount / totalCount) * 100 : 0;
-  const savedHours = Math.round(selfCount * 0.083);
-  const nightRate = report.history.length ? (nightCount / report.history.length) * 100 : 0;
-
-  // FCR
-  const totalUsers = Object.keys(userMap).length || 1;
-  const singleUsers = Object.values(userMap).filter((c) => c === 1).length;
-  const fcrRate = (singleUsers / totalUsers) * 100;
-  const avgQueriesPerUser = Number((report.history.length / totalUsers).toFixed(1)) || 1.2;
-
-  // Peak Hour
-  let peakHour = 14;
-  let maxHCount = 0;
-  hours.forEach((count, h) => {
-    if (count > maxHCount) {
-      maxHCount = count;
-      peakHour = h;
-    }
-  });
-
-  // Day of week
-  const totalDays = dayOfWeekCounts.reduce((a, b) => a + b, 0) || 1;
-  const mondayCount = dayOfWeekCounts[1];
-  const mondayRate = (mondayCount / totalDays) * 100;
-  const weekendCount = dayOfWeekCounts[0] + dayOfWeekCounts[6];
-  const weekendRate = (weekendCount / totalDays) * 100;
-
-  // Category ranking
-  const catMap: Record<string, number> = {};
-  report.faqSummary.forEach((f) => {
-    let name = f.category_name?.trim() || "기타/일반 안내";
-    if (name.includes("AS") || name.includes("수리")) name = "A/S 및 수리 접수";
-    else if (name.includes("소모품") || name.includes("부품") || name.includes("필터")) name = "부품 및 소모품 구매";
-    else if (name.includes("사용법") || name.includes("설정") || name.includes("연결")) name = "제품 사용법 및 조작";
-    else if (name.includes("교환") || name.includes("반품") || name.includes("환불")) name = "교환/반품/배송";
-    else if (name.includes("보증") || name.includes("정품")) name = "정품 등록 및 보증";
-    else if (name.includes("상담원") || name.includes("연결")) name = "상담원 연결";
-    catMap[name] = (catMap[name] || 0) + f.hit_count;
-  });
-  const categoryRanking = Object.entries(catMap)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-
-  const brandBenchmark = calculateBrandHealth(report.daily, report.brands || []);
-
+  const friendCount = (report.channelFriendSummary || []).reduce((sum, row) => sum + (row.channel_friend_status === "friend" ? row.total_requests : 0), 0);
+  const { hours, weekdays } = report.activity;
   return {
-    totalCount,
-    matchedCount,
-    unmatchedCount,
-    matchRate: totalCount ? (matchedCount / totalCount) * 100 : 0,
-    uniqueUsers,
-    friendCount,
-    friendRate,
-    improvementCount,
-    deflectionRate,
-    escalationRate,
-    selfCount,
-    agentCount: effectiveAgentCount,
-    savedHours,
-    nightRate,
-    fcrRate,
-    avgQueriesPerUser,
-    hourlyCounts: hours,
-    peakHour,
-    mondayRate,
-    mondayCount,
-    weekendRate,
-    weekendCount,
-    categoryRanking,
-    riskCount,
-    riskRate: report.history.length ? (riskCount / report.history.length) * 100 : 0,
-    shortMatchRate: shortCount ? (shortMatched / shortCount) * 100 : 0,
-    longMatchRate: longCount ? (longMatched / longCount) * 100 : 0,
-    brandBenchmark,
+    totalCount, matchedCount, unmatchedCount, friendCount,
+    matchRate: totalCount ? 100 * matchedCount / totalCount : 0,
+    friendRate: totalCount ? 100 * friendCount / totalCount : 0,
+    peakHour: totalCount ? hours.indexOf(Math.max(...hours)) : -1,
+    nightCount: hours.reduce((sum, count, hour) => sum + (hour < 9 || hour >= 18 ? count : 0), 0),
+    weekendCount: weekdays[0] + weekdays[6],
+    brandBenchmark: calculateBrandHealth(report.daily, report.brands || []),
   };
 }
 
-export function buildReportInsights(report: PdfReportInput, metrics: ReportMetrics): string[] {
-  const topFaq = report.faqSummary[0];
-  const topBrand = metrics.brandBenchmark.find((brand) => brand.total > 0);
+export type ReportMetrics = ReturnType<typeof summarizeReport>;
 
+export function buildReportInsights(report: PdfReportInput, metrics: ReportMetrics): string[] {
+  if (!metrics.totalCount) return ["조회 기간의 문의가 없습니다."];
+  const { activity } = report;
+  const faq = report.faqSummary[0];
+  const brand = metrics.brandBenchmark[0];
   return [
-    `챗봇 자체 완결률은 ${metrics.deflectionRate.toFixed(1)}%로, 상담원 연결 없이 ${formatNumber(metrics.selfCount)}건의 문의를 무인 처리하여 약 ${formatNumber(metrics.savedHours)}시간의 CS 업무를 절감했습니다.`,
-    `고객 1회 완결률(FCR)은 ${metrics.fcrRate.toFixed(1)}%이며, 인입 문의가 가장 집중되는 피크 타임은 ${metrics.peakHour}시로 분석되었습니다.`,
-    topBrand
-      ? `[${topBrand.name}]의 대화량이 ${formatNumber(topBrand.total)}건으로 가장 많습니다. 응답 건강도는 ${topBrand.statusLabel} 상태입니다.`
-      : "조회기간에 브랜드별 상담 기록이 없습니다.",
-    topFaq
-      ? `가장 많은 사용자가 조회한 표준 FAQ는 "${truncate(topFaq.faq_question || topFaq.category_name || "FAQ", 36)}"이며, 총 ${formatNumber(topFaq.hit_count)}건 안내되었습니다.`
-      : "조회 범위 내에 FAQ 매칭 요약 데이터가 없습니다.",
+    `전체 문의 ${formatNumber(metrics.totalCount)}건 중 ${formatNumber(metrics.matchedCount)}건이 FAQ에 매칭되었습니다.`,
+    `고객 ID가 있는 ${formatNumber(activity.users)}명 중 한 번만 문의한 고객은 ${formatNumber(activity.singleUsers)}명입니다.`,
+    brand ? `문의가 가장 많은 브랜드는 ${brand.name}이며 총 ${formatNumber(brand.total)}건입니다.` : "브랜드 기록이 없습니다.",
+    faq ? `가장 많이 매칭된 FAQ는 “${truncate(faq.faq_question || faq.category_name || "FAQ", 36)}”이며 ${formatNumber(faq.hit_count)}회입니다.` : "매칭된 FAQ가 없습니다.",
   ];
 }
-
-export type ReportMetrics = {
-  totalCount: number;
-  matchedCount: number;
-  unmatchedCount: number;
-  matchRate: number;
-  uniqueUsers: number;
-  friendCount: number;
-  friendRate: number;
-  improvementCount: number;
-  deflectionRate: number;
-  escalationRate: number;
-  selfCount: number;
-  agentCount: number;
-  savedHours: number;
-  nightRate: number;
-  fcrRate: number;
-  avgQueriesPerUser: number;
-  hourlyCounts: number[];
-  peakHour: number;
-  mondayRate: number;
-  mondayCount: number;
-  weekendRate: number;
-  weekendCount: number;
-  categoryRanking: Array<{ name: string; count: number }>;
-  riskCount: number;
-  riskRate: number;
-  shortMatchRate: number;
-  longMatchRate: number;
-  brandBenchmark: BrandHealthStat[];
-};
 
 function getBrandReviewPriorityText(brandStats: BrandHealthStat[]): string {
   const priority = brandStats

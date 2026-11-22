@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
+import { reportAccess } from "@/lib/report-access";
+
 export const dynamic = "force-dynamic";
 
 const HISTORY_TABLE = process.env.SUPABASE_HISTORY_TABLE || "faq_history";
@@ -15,32 +17,25 @@ const KNOWN_BRANDS: Record<string, string> = {
 
 export async function GET() {
   try {
+    const access = await reportAccess();
+    if (access.denied) return access.denied;
     const supabase = createSupabaseServerClient();
-    const { data, error } = await supabase
-      .from(HISTORY_TABLE)
-      .select("brand, brand_name")
-      .not("brand", "is", null)
-      .order("brand", { ascending: true })
-      .limit(1000);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const brandMap = new Map(Object.entries(KNOWN_BRANDS).map(([brand, brand_name]) => [brand, { brand, brand_name }]));
+    let after: string | null = null;
+    for (;;) {
+      let query = supabase.from(HISTORY_TABLE).select("brand,brand_name").not("brand", "is", null)
+        .order("brand").order("occurred_at", { ascending: false }).limit(500);
+      if (after !== null) query = query.gt("brand", after);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data?.length) break;
+      const seen = new Set<string>();
+      for (const row of data) {
+        if (!seen.has(row.brand)) brandMap.set(row.brand, { brand: row.brand, brand_name: row.brand_name || KNOWN_BRANDS[row.brand] || row.brand });
+        seen.add(row.brand);
+      }
+      after = data[data.length - 1].brand;
     }
-
-    const brandMap = new Map<string, { brand: string; brand_name: string }>();
-
-    // Register known brands first to ensure standard ordering
-    Object.entries(KNOWN_BRANDS).forEach(([key, name]) => {
-      brandMap.set(key, { brand: key, brand_name: name });
-    });
-
-    (data || []).forEach((row) => {
-      const existing = brandMap.get(row.brand);
-      brandMap.set(row.brand, {
-        brand: row.brand,
-        brand_name: row.brand_name || existing?.brand_name || row.brand,
-      });
-    });
 
     const brands = Array.from(brandMap.values());
 

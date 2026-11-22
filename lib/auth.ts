@@ -12,11 +12,9 @@ export const SESSION_COOKIE_NAME = "gv_report_session";
 const SESSION_EXPIRY_SECONDS = 24 * 60 * 60; // 24시간
 
 function getSecretKey(): string {
-  return (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.APP_SECRET_KEY ||
-    "gv-chatbot-report-fallback-secret-2026"
-  );
+  const secret = process.env.APP_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error("세션 서명 키가 설정되지 않았습니다.");
+  return secret;
 }
 
 export function cleanServices(value: unknown, role?: string): string[] {

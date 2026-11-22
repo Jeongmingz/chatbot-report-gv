@@ -1439,7 +1439,7 @@ button {
   }
 
   /* Hide entire web app UI during print */
-  .app-shell,
+  .app-shell > :not(.pdf-preview-modal-root),
   .filter-card,
   .toast-notice,
   .alert-box,
@@ -1447,6 +1447,14 @@ button {
   .pdf-preview-header,
   header.pdf-preview-header {
     display: none !important;
+  }
+
+  .app-shell {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .pdf-preview-modal-root {

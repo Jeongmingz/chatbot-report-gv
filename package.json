@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "tsc lib/report-server.ts --outDir .next/report-tests --target es2022 --module commonjs --skipLibCheck && node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.106.1",

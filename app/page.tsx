@@ -19,7 +19,7 @@ import {
   brandLabel,
   matchRate,
   shortDate,
-  sortByDate,
+
   supportMenuLabel,
   channelFriendStatusLabel,
   channelFriendTone,
@@ -32,7 +32,9 @@ import {
   type ChannelFriendSummaryRow,
   type HistoryRow,
 } from "@/lib/report";
-import { exportDashboardPdf } from "@/lib/pdf-export";
+import { aggregateDailyByDate } from "@/lib/pdf-export";
+import { presetDates as getPresetDates } from "@/lib/report-period";
+import type { Activity } from "@/lib/period-report";
 import { ReportPreviewModal } from "@/app/components/report-preview-modal";
 import { KpiDrilldownModal, type KpiDrilldownType } from "@/app/components/kpi-drilldown-modal";
 import { OperationalInsights } from "@/app/components/operational-insights";
@@ -74,6 +76,7 @@ const centerTextPlugin = {
 ChartJS.register(centerTextPlugin);
 
 type DashboardData = {
+  activity: Activity;
   daily: ReportRow[];
   faqSummary: FaqSummaryRow[];
   unmatchedQueries: UnmatchedQueryRow[];
@@ -103,9 +106,12 @@ export default function Home() {
 
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [isLoadingBrands, setIsLoadingBrands] = useState(false);
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const filterKey = JSON.stringify([from, to, brand, limit, refresh]);
+  const [result, setResult] = useState<{ key: string; data: DashboardData } | null>(null);
+  const data = result?.key === filterKey ? result.data : null;
+  const scopedBrands = brand ? brands.filter(item => item.brand === brand) : brands;
   const [isLoading, setIsLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [drilldownType, setDrilldownType] = useState<KpiDrilldownType | null>(null);
   const [error, setError] = useState("");
@@ -165,7 +171,7 @@ export default function Home() {
       }
     }
     void loadBrands();
-  }, []);
+  }, [refresh]);
 
   // Handle Preset selection
   function handlePresetChange(preset: PresetPeriod) {
@@ -178,7 +184,7 @@ export default function Home() {
   }
 
   // Load Dashboard data from Supabase API
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (signal: AbortSignal) => {
     setError("");
     setIsLoading(true);
 
@@ -188,14 +194,21 @@ export default function Home() {
       if (to) params.set("to", to);
       if (brand.trim()) params.set("brand", brand.trim());
 
-      const response = await fetch(`/api/reports?${params.toString()}`, { cache: "no-store" });
+      const response = await fetch(`/api/reports?${params.toString()}`, { cache: "no-store", signal });
       const payload = (await response.json()) as Partial<DashboardData> & { error?: string };
 
+      if (signal.aborted) return;
+      if (response.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
       if (!response.ok) {
         throw new Error(payload.error || "DB 데이터를 불러오지 못했습니다.");
       }
 
-      const nextData = {
+      if (!payload.activity) throw new Error("리포트 집계 정보가 누락되었습니다.");
+      const nextData: DashboardData = {
+        activity: payload.activity,
         daily: payload.daily || [],
         faqSummary: payload.faqSummary || [],
         unmatchedQueries: payload.unmatchedQueries || [],
@@ -203,45 +216,42 @@ export default function Home() {
         channelFriendSummary: payload.channelFriendSummary || [],
         history: payload.history || [],
       };
-
-      setData(nextData);
+      setResult({ key: filterKey, data: nextData });
       setNotice(
         `데이터 로드 완료: 일일 ${numberFormat.format(nextData.daily.length)}건 / FAQ ${numberFormat.format(nextData.faqSummary.length)}건 / 미매칭 ${numberFormat.format(nextData.unmatchedQueries.length)}건 / 개선대기열 ${numberFormat.format(nextData.improvementQueue.length)}건 / 채널친구 ${numberFormat.format(nextData.channelFriendSummary.length)}건`,
       );
     } catch (err) {
+      if (signal.aborted) return;
+      setResult(null);
       setError(err instanceof Error ? err.message : "DB 데이터를 불러오는 중 오류가 발생했습니다.");
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
-  }, [from, to, brand, limit]);
+  }, [from, to, brand, limit, filterKey]);
 
   // Auto load whenever filters (from, to, brand, limit) change with slight debounce
   useEffect(() => {
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void loadDashboard();
+      void loadDashboard(controller.signal);
     }, 150);
-    return () => window.clearTimeout(timer);
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [loadDashboard]);
 
   // Open High-Resolution C-Level Report Preview & Vector Print Modal
   function exportPdf() {
-    if (!data) return;
+    if (!data?.daily.length) return;
     setError("");
     setIsPreviewOpen(true);
   }
 
-
-
   const summary = useMemo(() => summarize(data), [data]);
+
+  const visibleUnmatched = filterRows(data?.unmatchedQueries || [], searchQuery, ["brand_name", "sample_query", "menu_id"]);
+  const visibleImprovements = filterRows(data?.improvementQueue || [], searchQuery, ["brand_name", "sample_query", "menu_id", "result_type"]);
 
   return (
     <main className="app-shell">
-      {/* PDF Export Spinner Overlay */}
-      <div className={`pdf-loading-overlay ${isExporting ? "active" : ""}`} aria-hidden={!isExporting}>
-        <div className="pdf-spinner" />
-        <div className="pdf-spinner-text">고화질 6페이지 C-Level 리포트 렌더링 중...</div>
-      </div>
-
       {/* Top Bar */}
       <TopBar user={currentUser} onLogout={handleLogout} />
 
@@ -267,7 +277,7 @@ export default function Home() {
         onBrandChange={setBrand}
         onLimitChange={setLimit}
         onExport={exportPdf}
-        canExport={Boolean(data)}
+        canExport={Boolean(data?.daily.length)}
       />
 
       {/* Error & Toast Banners */}
@@ -279,6 +289,7 @@ export default function Home() {
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <span>{error}</span>
+          <button type="button" className="btn" disabled={isLoading} onClick={() => setRefresh(value => value + 1)}>다시 조회</button>
         </div>
       )}
 
@@ -292,7 +303,7 @@ export default function Home() {
       )}
 
       {/* Dashboard Section */}
-      {data ? (
+      {data && data.daily.length > 0 ? (
         <section id="pdfContent">
           {/* KPI Cards Grid */}
           <div className="kpi-grid">
@@ -360,12 +371,11 @@ export default function Home() {
 
           {/* Operational Practitioner Insights */}
           <OperationalInsights
-            history={data.history}
-            faqSummary={data.faqSummary}
+            activity={data.activity}
             unmatchedQueries={data.unmatchedQueries}
             channelFriendSummary={data.channelFriendSummary}
             daily={data.daily}
-            brands={brands}
+            brands={scopedBrands}
             totalCount={summary.totalCount}
           />
 
@@ -544,7 +554,7 @@ export default function Home() {
           {activeTab === "unmatched" && (
             <DataTable
               title="미매칭 고객 문의 상세 내역"
-              rows={filterRows(data.unmatchedQueries, searchQuery, ["brand_name", "sample_query", "menu_id"])}
+              rows={visibleUnmatched}
               columns={unmatchedColumns}
               headerActions={
                 <>
@@ -553,7 +563,7 @@ export default function Home() {
                     className="btn btn-csv"
                     onClick={() => {
                       try {
-                        downloadUnmatchedCsv(data.unmatchedQueries, {
+                        downloadUnmatchedCsv(visibleUnmatched, {
                           brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
                           from,
                           to,
@@ -571,7 +581,7 @@ export default function Home() {
                     className="btn btn-copy"
                     onClick={async () => {
                       try {
-                        await copyUnmatchedSummaryText(data.unmatchedQueries, {
+                        await copyUnmatchedSummaryText(visibleUnmatched, {
                           brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
                           from,
                           to,
@@ -591,7 +601,7 @@ export default function Home() {
           {activeTab === "improvement" && (
             <DataTable
               title="우선 보강 필요 질문 대기열"
-              rows={filterRows(data.improvementQueue, searchQuery, ["brand_name", "sample_query", "menu_id", "result_type"])}
+              rows={visibleImprovements}
               columns={improvementColumns}
               headerActions={
                 <>
@@ -600,7 +610,7 @@ export default function Home() {
                     className="btn btn-csv"
                     onClick={() => {
                       try {
-                        downloadUnmatchedCsv(data.improvementQueue, {
+                        downloadUnmatchedCsv(visibleImprovements, {
                           brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
                           from,
                           to,
@@ -618,7 +628,7 @@ export default function Home() {
                     className="btn btn-copy"
                     onClick={async () => {
                       try {
-                        await copyUnmatchedSummaryText(data.improvementQueue, {
+                        await copyUnmatchedSummaryText(visibleImprovements, {
                           brandLabel: brand ? brands.find((b) => b.brand === brand)?.brand_name : "전체 브랜드",
                           from,
                           to,
@@ -653,14 +663,14 @@ export default function Home() {
       ) : (
         <section className="dashboard-empty">
           <div className="dashboard-empty-icon">📊</div>
-          <h2>조회된 상담 대화 데이터가 없습니다.</h2>
-          <p>상단의 기간 프리셋이나 날짜, 브랜드 필터를 변경해보세요.</p>
+          <h2>{error ? "조회 상태를 확인해 주세요." : data ? "선택 기간의 상담 기록이 없습니다." : "리포트를 조회하고 있습니다."}</h2>
         </section>
       )}
 
       {/* KPI Drilldown Detail & Excel Export Modal */}
-      {data && (
+      {data && drilldownType && (
         <KpiDrilldownModal
+          key={filterKey + drilldownType}
           isOpen={Boolean(drilldownType)}
           onClose={() => setDrilldownType(null)}
           type={drilldownType}
@@ -683,7 +693,8 @@ export default function Home() {
               brandLabel: brand ? brands.find((item) => item.brand === brand)?.brand_name || brand : "전체 브랜드",
               limit,
             },
-            brands,
+            brands: scopedBrands,
+            activity: data.activity,
             daily: data.daily,
             faqSummary: data.faqSummary,
             unmatchedQueries: data.unmatchedQueries,
@@ -875,7 +886,7 @@ function FilterPanel({
           </select>
         </div>
         <div className="input-field">
-          <label>표시 제한 건수</label>
+          <label>질문·로그 표시 건수</label>
           <select value={limit} onChange={(e) => onLimitChange(e.target.value)}>
             <option value="50">50건</option>
             <option value="100">100건 (권장)</option>
@@ -1077,30 +1088,6 @@ function filterRows<T extends Record<string, unknown>>(rows: T[], query: string,
   );
 }
 
-function getPresetDates(preset: PresetPeriod): { from: string; to: string } {
-  const now = new Date();
-  const to = now.toISOString().slice(0, 10);
-
-  if (preset === "today") {
-    return { from: to, to };
-  }
-  if (preset === "7d") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 6);
-    return { from: d.toISOString().slice(0, 10), to };
-  }
-  if (preset === "30d") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 29);
-    return { from: d.toISOString().slice(0, 10), to };
-  }
-  if (preset === "month") {
-    const d = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: d.toISOString().slice(0, 10), to };
-  }
-  return { from: to, to };
-}
-
 function summarize(data: DashboardData | null) {
   if (!data) {
     return {
@@ -1125,8 +1112,8 @@ function summarize(data: DashboardData | null) {
   const channelRequests = data.channelFriendSummary.reduce((sum, f) => sum + f.total_requests, 0);
   const friendRate = channelRequests ? (friendRequests / channelRequests) * 100 : 0;
 
-  const improvementCount = data.improvementQueue.reduce((sum, i) => sum + i.query_count, 0);
-  const improvementTypes = data.improvementQueue.length;
+  const improvementCount = data.activity.improvementCount;
+  const improvementTypes = data.activity.improvementTypes;
 
   return {
     totalCount,
@@ -1260,19 +1247,19 @@ function channelFriendDoughnutOptions(friendRate: number, total: number): ChartO
 }
 
 function dailyVolumeChart(rows: ReportRow[]) {
-  const sorted = sortByDate(rows).slice(-14);
+  const sorted = aggregateDailyByDate(rows);
   return {
-    labels: sorted.map((r) => shortDate(r.report_date)),
+    labels: sorted.map((r) => shortDate(r.date)),
     datasets: [
       {
         label: "매칭 성공",
-        data: sorted.map((r) => r.matched_count),
+        data: sorted.map((r) => r.matched),
         backgroundColor: "#4f46e5",
         borderRadius: 6,
       },
       {
         label: "매칭 실패",
-        data: sorted.map((r) => r.unmatched_count),
+        data: sorted.map((r) => r.unmatched),
         backgroundColor: "#f43f5e",
         borderRadius: 6,
       },
@@ -1295,13 +1282,13 @@ function matchDoughnutChart(matched: number, unmatched: number) {
 }
 
 function dailyRateChart(rows: ReportRow[]) {
-  const sorted = sortByDate(rows).slice(-14);
+  const sorted = aggregateDailyByDate(rows);
   return {
-    labels: sorted.map((r) => shortDate(r.report_date)),
+    labels: sorted.map((r) => shortDate(r.date)),
     datasets: [
       {
         label: "매칭률 (%)",
-        data: sorted.map((r) => Number(matchRate(r).toFixed(1))),
+        data: sorted.map((r) => Number((r.total ? 100 * r.matched / r.total : 0).toFixed(1))),
         borderColor: "#059669",
         backgroundColor: "rgba(5, 150, 105, 0.08)",
         borderWidth: 2.5,

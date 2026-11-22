@@ -1,5 +1,6 @@
 "use client";
 
+import { seoulDate } from "@/lib/report-period";
 import { useEffect, useMemo, useState } from "react";
 import {
   supportMenuLabel,
@@ -57,21 +58,16 @@ export function KpiDrilldownModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Reset search when modal opens or type changes
-  useEffect(() => {
-    setSearchQuery("");
-  }, [type, isOpen]);
-
   // Modal configuration based on drill-down type
   const config = useMemo(() => {
     switch (type) {
       case "total":
         return {
-          title: "전체 상담 대화 원본 내역 (총 대화량 상세)",
-          subtitle: "고객이 카카오 챗봇에 인입한 전체 실시간 대화 내역입니다.",
+          title: "최근 상담 대화 내역 (총 대화량 상세)",
+          subtitle: "고객이 카카오 챗봇에 인입한 최근 대화 내역입니다. 표시 건수 설정을 적용합니다.",
           icon: "💬",
           colorTheme: "indigo",
-          filename: `[게이트비전]_전체상담대화내역_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_전체상담대화내역_${brandLabel}_${seoulDate()}`,
         };
       case "matched":
         return {
@@ -79,7 +75,7 @@ export function KpiDrilldownModal({
           subtitle: "챗봇이 표준 FAQ 답변과 정확히 매칭되어 고객 안내를 완료한 대화 목록입니다.",
           icon: "🎯",
           colorTheme: "blue",
-          filename: `[게이트비전]_자동응답성공대화_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_자동응답성공대화_${brandLabel}_${seoulDate()}`,
         };
       case "unmatched":
         return {
@@ -87,7 +83,7 @@ export function KpiDrilldownModal({
           subtitle: "기존 FAQ와 매칭되지 않아 상담원 확인 및 FAQ 신규 등록이 필요한 질문 목록입니다.",
           icon: "⚠️",
           colorTheme: "rose",
-          filename: `[게이트비전]_미매칭고객문의_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_미매칭고객문의_${brandLabel}_${seoulDate()}`,
         };
       case "rate":
         return {
@@ -95,7 +91,7 @@ export function KpiDrilldownModal({
           subtitle: "일자별/브랜드별 자동 응답 성공률과 고객 방문 현황 상세입니다.",
           icon: "📈",
           colorTheme: "emerald",
-          filename: `[게이트비전]_일별챗봇응답성과_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_일별챗봇응답성과_${brandLabel}_${seoulDate()}`,
         };
       case "friend":
         return {
@@ -103,7 +99,7 @@ export function KpiDrilldownModal({
           subtitle: "카카오톡 채널 추가 고객(단골 고객)과 비친구 방문자의 상담 이용 비교 내역입니다.",
           icon: "👥",
           colorTheme: "purple",
-          filename: `[게이트비전]_카카오채널친구분석_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_카카오채널친구분석_${brandLabel}_${seoulDate()}`,
         };
       case "improvement":
         return {
@@ -111,7 +107,7 @@ export function KpiDrilldownModal({
           subtitle: "응답 실패 및 유사도가 낮아 오답 위험이 있는 최우선 FAQ 보강 대상 질문입니다.",
           icon: "⚡",
           colorTheme: "amber",
-          filename: `[게이트비전]_답변우선개선대기열_${brandLabel}_${new Date().toISOString().slice(0, 10)}`,
+          filename: `[게이트비전]_답변우선개선대기열_${brandLabel}_${seoulDate()}`,
         };
       default:
         return null;
@@ -145,7 +141,7 @@ export function KpiDrilldownModal({
           r.faq_question || "-",
           r.category_name || "-",
         ]);
-        downloadGenericCsv(config?.filename || "상담대화내역", headers, csvData);
+        downloadGenericCsv(config?.filename || "상담대화내역", headers, csvData, { reportName: config?.title, conditions: [brandLabel, from + " ~ " + to, searchQuery].filter(Boolean) });
       };
 
       const table = (
@@ -220,8 +216,8 @@ export function KpiDrilldownModal({
           "선택 문의 메뉴",
           "고객 문의 내용 (미매칭 원문)",
           "누적 인입 건수",
-          "최근 7일 인입",
-          "최근 30일 인입",
+          "조회기간 내 최근 7일 인입",
+          "조회기간 내 최근 30일 인입",
           "문의 고객 수",
           "최근 문의 일시",
           "CS 분류",
@@ -246,7 +242,7 @@ export function KpiDrilldownModal({
           "",
           "대기",
         ]);
-        downloadGenericCsv(config?.filename || "미매칭고객문의", headers, csvData);
+        downloadGenericCsv(config?.filename || "미매칭고객문의", headers, csvData, { reportName: config?.title, conditions: [brandLabel, from + " ~ " + to, searchQuery].filter(Boolean) });
       };
 
       const table = (
@@ -313,7 +309,7 @@ export function KpiDrilldownModal({
           `${calcMatchRate(r).toFixed(1)}%`,
           String(r.unique_user_count || 0),
         ]);
-        downloadGenericCsv(config?.filename || "일별챗봇응답성과", headers, csvData);
+        downloadGenericCsv(config?.filename || "일별챗봇응답성과", headers, csvData, { reportName: config?.title, conditions: [brandLabel, from + " ~ " + to, searchQuery].filter(Boolean) });
       };
 
       const table = (
@@ -374,7 +370,7 @@ export function KpiDrilldownModal({
           `${r.match_rate_pct.toFixed(1)}%`,
           r.avg_score !== null && r.avg_score !== undefined ? (r.avg_score > 100 ? (r.avg_score / 10).toFixed(1) : r.avg_score.toFixed(1)) : "-",
         ]);
-        downloadGenericCsv(config?.filename || "카카오채널친구분석", headers, csvData);
+        downloadGenericCsv(config?.filename || "카카오채널친구분석", headers, csvData, { reportName: config?.title, conditions: [brandLabel, from + " ~ " + to, searchQuery].filter(Boolean) });
       };
 
       const table = (
@@ -450,7 +446,7 @@ export function KpiDrilldownModal({
           r.last_occurred_at ? r.last_occurred_at.slice(0, 19).replace("T", " ") : "-",
           "조치 대기",
         ]);
-        downloadGenericCsv(config?.filename || "답변우선개선대기열", headers, csvData);
+        downloadGenericCsv(config?.filename || "답변우선개선대기열", headers, csvData, { reportName: config?.title, conditions: [brandLabel, from + " ~ " + to, searchQuery].filter(Boolean) });
       };
 
       const table = (
@@ -502,7 +498,7 @@ export function KpiDrilldownModal({
     }
 
     return { filteredRows: [], exportHandler: () => {}, renderTableContent: null, totalCount: 0 };
-  }, [type, data, searchQuery, config]);
+  }, [type, data, searchQuery, config, brandLabel, from, to]);
 
   if (!isOpen || !config) return null;
 
@@ -518,7 +514,7 @@ export function KpiDrilldownModal({
             <div>
               <h2 className="drilldown-modal-title">{config.title}</h2>
               <p className="drilldown-modal-subtitle">
-                {brandLabel} • 조회기간: {from || "전체"} ~ {to || "전체"} (총 {numberFormat.format(totalCount)}건)
+                {brandLabel} • 조회기간: {from || "전체"} ~ {to || "전체"} (조회 목록 {numberFormat.format(totalCount)}건)
               </p>
             </div>
           </div>

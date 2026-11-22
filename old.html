@@ -602,12 +602,18 @@ function destroyCharts() {
   chartInstances = [];
 }
 
+function escapeHtml(value) {
+  const element = document.createElement('span');
+  element.textContent = String(value);
+  return element.innerHTML;
+}
+
 function fmtDate(d) {
   if (!d) return '-';
   try {
     const dt = new Date(d + 'T00:00:00');
     return dt.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
-  } catch { return d; }
+  } catch { return '-'; }
 }
 
 function rateStyle(r) {
@@ -688,8 +694,8 @@ function renderSingle(d) {
           <div class="report-date">📅 ${fmtDate(d.report_date)}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-          <span class="brand-badge">🏪 ${brandName}</span>
-          ${d.brand && d.brand !== brandName ? `<span style="font-size:11px;color:var(--text3);">코드: ${d.brand}</span>` : ''}
+          <span class="brand-badge">🏪 ${escapeHtml(brandName)}</span>
+          ${d.brand && d.brand !== brandName ? `<span style="font-size:11px;color:var(--text3);">코드: ${escapeHtml(d.brand)}</span>` : ''}
           ${actionButtons()}
         </div>
       </div>
@@ -775,7 +781,7 @@ function renderSingle(d) {
       </div>
 
       <div class="report-footer">
-        <span class="footer-text">🕐 리포트 기준일: ${d.report_date || '-'}</span>
+        <span class="footer-text">🕐 리포트 기준일: ${escapeHtml(d.report_date || '-')}</span>
         <span class="footer-text">카카오 챗봇 히스토리 기반 자동 생성</span>
       </div>
     </div>
@@ -873,8 +879,8 @@ function renderTrend(data) {
           <div class="report-date">📅 ${dateLabel} · 최근 ${trendData.length}일</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-          <span class="brand-badge">📈 ${brandName}</span>
-          ${latest.brand && latest.brand !== brandName ? `<span style="font-size:11px;color:var(--text3);">코드: ${latest.brand}</span>` : ''}
+          <span class="brand-badge">📈 ${escapeHtml(brandName)}</span>
+          ${latest.brand && latest.brand !== brandName ? `<span style="font-size:11px;color:var(--text3);">코드: ${escapeHtml(latest.brand)}</span>` : ''}
           ${actionButtons()}
         </div>
       </div>
@@ -1077,8 +1083,8 @@ function renderMulti(data) {
     return `
       <div class="brand-card">
         <div class="brand-card-header">
-          <span class="brand-name-badge">🏪 ${d.brand_name || d.brand || '-'}</span>
-          <span class="brand-date">${d.report_date || ''}</span>
+          <span class="brand-name-badge">🏪 ${escapeHtml(d.brand_name || d.brand || '-')}</span>
+          <span class="brand-date">${escapeHtml(d.report_date || '')}</span>
         </div>
         <div class="brand-metrics">
           <div class="bm-item"><div class="bm-label">총 대화</div><div class="bm-val">${total.toLocaleString()}건</div></div>

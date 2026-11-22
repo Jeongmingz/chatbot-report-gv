@@ -27,7 +27,8 @@ export async function recordDownloadAudit(params: DownloadAuditParams): Promise<
       keepalive: true,
     });
 
-    return res.ok;
+    if (!res.ok) throw new Error("감사 로그 저장 실패 (" + res.status + ")");
+    return true;
   } catch (error) {
     console.warn("[download-audit] 감사 로그 전송 실패 (다운로드는 계속 진행):", error);
     return false;

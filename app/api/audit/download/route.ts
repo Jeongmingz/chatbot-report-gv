@@ -1,14 +1,12 @@
+import { reportAccess } from "@/lib/report-access";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    const user = await verifySessionToken(token);
-
+    const access = await reportAccess();
+    if (access.denied) return access.denied;
+    const user = access.user;
     const body = await request.json().catch(() => ({}));
     const {
       report_name,
@@ -17,9 +15,9 @@ export async function POST(request: Request) {
       page_path = "/report",
     } = body;
 
-    const actor = user?.email || user?.name || "anonymous";
-    const actor_id = user?.id || null;
-    const actor_role = user?.role || "viewer";
+    const actor = user.email || user.name;
+    const actor_id = user.id;
+    const actor_role = user.role;
 
     const safeConditions = Array.isArray(conditions)
       ? conditions.map((c) => String(c).slice(0, 200)).slice(0, 12)

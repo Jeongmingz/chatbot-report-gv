@@ -1,3 +1,5 @@
+import { htmlText } from "./report-output";
+import { seoulDate } from "./report-period";
 import nodemailer from "nodemailer";
 import { supportMenuLabel, type ReportRow, type FaqSummaryRow, type UnmatchedQueryRow, type ImprovementQueueRow, type ChannelFriendSummaryRow } from "@/lib/report";
 
@@ -5,6 +7,7 @@ export type EmailReportData = {
   daily: ReportRow[];
   faqSummary: FaqSummaryRow[];
   unmatchedQueries: UnmatchedQueryRow[];
+  improvementCount?: number;
   improvementQueue?: ImprovementQueueRow[];
   channelFriendSummary?: ChannelFriendSummaryRow[];
   filters?: {
@@ -28,10 +31,9 @@ export type SendEmailResult = {
  */
 export async function sendDailyReportEmail(
   data: EmailReportData,
-  recipientOverride?: string,
 ): Promise<SendEmailResult> {
-  const recipient = recipientOverride || process.env.REPORT_RECIPIENT_EMAIL || "on_gv@gatevision.co.kr";
-  const today = new Date().toISOString().slice(0, 10);
+  const recipient = process.env.REPORT_RECIPIENT_EMAIL || "on_gv@gatevision.co.kr";
+  const today = data.filters?.from || seoulDate();
   const brandName = data.filters?.brandLabel || "전체 브랜드";
   const subject = `[게이트비전 챗봇 리포트] ${today} 일일 운영 현황 및 CS 미매칭 질문 브리핑 (${brandName})`;
 
@@ -117,7 +119,7 @@ export function generateDailyEmailHtml(
   const topFaqs = data.faqSummary.slice(0, 5);
   const topUnmatched = data.unmatchedQueries.slice(0, 5);
   const improvements = data.improvementQueue || [];
-  const improvementCount = improvements.reduce((s, i) => s + i.query_count, 0);
+  const improvementCount = data.improvementCount ?? improvements.reduce((s, i) => s + i.query_count, 0);
 
   const formatNum = (n: number) => new Intl.NumberFormat("ko-KR").format(n);
 
@@ -171,7 +173,7 @@ export function generateDailyEmailHtml(
     <div class="header">
       <span class="header-badge">Gatevision Chatbot Daily Briefing</span>
       <h1>게이트비전 챗봇 일일 운영 인사이트</h1>
-      <p>조회 기준: ${today} | 분석 대상: ${brandName}</p>
+      <p>조회 기준: ${htmlText(today)} | 분석 대상: ${htmlText(brandName)}</p>
     </div>
     
     <div class="content">
@@ -184,12 +186,12 @@ export function generateDailyEmailHtml(
         </div>
         <div class="kpi-cell">
           <span class="kpi-label">평균 매칭률</span>
-          <span class="kpi-value" style="color: ${matchRate >= 80 ? "#059669" : matchRate >= 60 ? "#d97706" : "#e11d48"};">${matchRate.toFixed(1)}%</span>
-          <span class="kpi-sub">${matchRate >= 80 ? "목표 달성" : "FAQ 점검 필요"}</span>
+          <span class="kpi-value" style="color: ${matchRate >= 80 ? "#059669" : matchRate >= 60 ? "#d97706" : "#e11d48"};">${totalCount ? matchRate.toFixed(1) + "%" : "산출 불가"}</span>
+          <span class="kpi-sub">${!totalCount ? "문의 없음" : matchRate >= 80 ? "목표 달성" : "FAQ 점검 필요"}</span>
         </div>
         <div class="kpi-cell">
           <span class="kpi-label">채널 집계 내 친구 비중</span>
-          <span class="kpi-value" style="color: #7c3aed;">${friendRate.toFixed(1)}%</span>
+          <span class="kpi-value" style="color: #7c3aed;">${channelRequestCount ? friendRate.toFixed(1) + "%" : "산출 불가"}</span>
           <span class="kpi-sub">${formatNum(friendCount)}건</span>
         </div>
         <div class="kpi-cell">
@@ -216,8 +218,8 @@ export function generateDailyEmailHtml(
                   .map(
                     (f) => `
             <tr>
-              <td><span class="badge badge-brand">${f.brand_name}</span></td>
-              <td><strong>${f.faq_question || f.category_name || "-"}</strong></td>
+              <td><span class="badge badge-brand">${htmlText(f.brand_name)}</span></td>
+              <td><strong>${htmlText(f.faq_question || f.category_name || "-")}</strong></td>
               <td style="text-align: right; font-weight: 700; color: #4f46e5;">${formatNum(f.hit_count)}회</td>
             </tr>
           `,
@@ -236,7 +238,7 @@ export function generateDailyEmailHtml(
           <tr>
             <th style="width: 18%;">브랜드</th>
             <th style="width: 22%;">문의메뉴</th>
-            <th style="width: 45%;">고객 실제 질문 원문</th>
+            <th style="width: 45%;">고객 질문 (연락처 가림)</th>
             <th style="width: 15%; text-align: right;">발생건수</th>
           </tr>
         </thead>
@@ -247,9 +249,9 @@ export function generateDailyEmailHtml(
                   .map(
                     (u) => `
             <tr>
-              <td><span class="badge badge-brand">${u.brand_name}</span></td>
-              <td><span class="badge badge-menu">${supportMenuLabel(u.menu_id)}</span></td>
-              <td><strong style="color: #0f172a;">${u.sample_query}</strong></td>
+              <td><span class="badge badge-brand">${htmlText(u.brand_name)}</span></td>
+              <td><span class="badge badge-menu">${htmlText(supportMenuLabel(u.menu_id))}</span></td>
+              <td><strong style="color: #0f172a;">${htmlText(u.sample_query)}</strong></td>
               <td style="text-align: right; font-weight: 700; color: #e11d48;">${formatNum(u.query_count)}회</td>
             </tr>
           `,
@@ -272,7 +274,7 @@ export function generateDailyEmailHtml(
 
     <div class="footer">
       본 메일은 게이트비전 AI 챗봇 운영 센터에서 매일 아침 자동 발송되는 운영 현황 브리핑입니다.<br>
-      수신자: ${recipient} | 데이터 원천: Supabase Production
+      수신자: ${htmlText(recipient)} | 데이터 원천: Supabase Production
     </div>
   </div>
 </body>
