@@ -113,3 +113,13 @@ test("The Supabase query filters before grouping and traverses equal timestamps 
   assert.equal(result.daily[0].total_count, 2);
   assert.deepEqual(result.faqSummary.map(f => [f.faq_id, f.hit_count]).sort(), [["A", 1], ["B", 1]]);
 });
+
+test("Korean weekday-hour cells count each inquiry exactly once across detail limits", () => {
+  const rows = ["2026-11-22T23:59:59", "2026-11-23T00:00:00", "2026-11-23T00:59:00"]
+    .map((occurred_at, id) => inquiry(id, { occurred_at }));
+  const { hourlyByWeekday, weekdays, hours } = finish(rows, 1).activity;
+  assert.equal(hourlyByWeekday[0][23], 1);
+  assert.equal(hourlyByWeekday[1][0], 2);
+  assert.deepEqual(hourlyByWeekday.map(row => row.reduce((a,b) => a+b, 0)), weekdays);
+  assert.deepEqual(hours, hours.map((_, h) => hourlyByWeekday.reduce((n, row) => n + row[h], 0)));
+});

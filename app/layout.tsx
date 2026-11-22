@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "카카오 챗봇 일일 리포트",
-  description: "카카오 챗봇 히스토리 JSON 기반 리포트 생성기",
+  title: "게이트비젼 챗봇 문의 분석",
+  description: "브랜드별 카카오 챗봇 문의 추이, FAQ 매칭 성과와 미매칭 질문을 분석합니다.",
 };
 
 export const viewport: Viewport = {

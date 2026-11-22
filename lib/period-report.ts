@@ -41,6 +41,7 @@ export function createPeriodReport(endDay: string, limit: number) {
   const unmatched = new Map<string, Group<UnmatchedQueryRow>>();
   const improvement = new Map<string, Group<ImprovementQueueRow>>();
   const channel = new Map<string, Group<ChannelFriendSummaryRow>>();
+  const hourlyByWeekday = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
   const users = new Map<string, number>();
   const categories = new Map<string, number>();
   const hours: number[] = Array(24).fill(0);
@@ -137,8 +138,11 @@ export function createPeriodReport(endDay: string, limit: number) {
       longCount++;
       longMatched += matched;
     }
-    hours[Number(h.occurred_at.slice(11, 13))]++;
-    weekdays[new Date(day + "T00:00:00Z").getUTCDay()]++;
+    const hour = Number(h.occurred_at.slice(11, 13));
+    const weekday = new Date(day + "T00:00:00Z").getUTCDay();
+    hours[hour]++;
+    weekdays[weekday]++;
+    hourlyByWeekday[weekday][hour]++;
   }
 
   function finish() {
@@ -153,7 +157,7 @@ export function createPeriodReport(endDay: string, limit: number) {
       })).sort((a, b) => b.total_requests - a.total_requests),
       history,
       activity: {
-        hours, weekdays, agentCount, riskCount, risks, identifiedRequests, users: users.size,
+        hours, weekdays, hourlyByWeekday, agentCount, riskCount, risks, identifiedRequests, users: users.size,
         singleUsers: [...users.values()].filter(n => n === 1).length,
         improvementCount, improvementTypes: improvement.size, shortCount, shortMatched, longCount, longMatched,
         categories: [...categories].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),

@@ -1,25 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { AnalysisOverview } from "./components/analysis-overview";
+import "./analysis.css";
 import {
-  ArcElement,
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
-} from "chart.js";
-import type { ChartOptions } from "chart.js";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bar, Doughnut, Line } from "react-chartjs-2";
-import {
-  brandLabel,
   matchRate,
-  shortDate,
-
   supportMenuLabel,
   channelFriendStatusLabel,
   channelFriendTone,
@@ -32,48 +18,14 @@ import {
   type ChannelFriendSummaryRow,
   type HistoryRow,
 } from "@/lib/report";
-import { aggregateDailyByDate } from "@/lib/pdf-export";
 import { presetDates as getPresetDates } from "@/lib/report-period";
 import type { Activity } from "@/lib/period-report";
-import { ReportPreviewModal } from "@/app/components/report-preview-modal";
-import { KpiDrilldownModal, type KpiDrilldownType } from "@/app/components/kpi-drilldown-modal";
-import { OperationalInsights } from "@/app/components/operational-insights";
+import type { KpiDrilldownType } from "./components/kpi-drilldown-modal";
 import { downloadUnmatchedCsv, copyUnmatchedSummaryText, copySingleQueryText } from "@/lib/export-utils";
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
-
-// Custom Chart.js Center Text Plugin for Doughnut Charts
-const centerTextPlugin = {
-  id: "centerText",
-  beforeDraw(chart: ChartJS) {
-    const plugins = chart.config.options?.plugins as Record<string, unknown> | undefined;
-    const centerConfig = plugins?.centerText as { text?: string; subtext?: string; color?: string; subcolor?: string } | undefined;
-    if (!centerConfig || !centerConfig.text) return;
-
-    const { ctx, chartArea } = chart;
-    if (!chartArea) return;
-
-    ctx.save();
-    const centerX = (chartArea.left + chartArea.right) / 2;
-    const centerY = (chartArea.top + chartArea.bottom) / 2;
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.font = "800 24px -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillStyle = centerConfig.color || "#0f172a";
-    ctx.fillText(centerConfig.text, centerX, centerConfig.subtext ? centerY - 9 : centerY);
-
-    if (centerConfig.subtext) {
-      ctx.font = "600 11px -apple-system, BlinkMacSystemFont, sans-serif";
-      ctx.fillStyle = centerConfig.subcolor || "#64748b";
-      ctx.fillText(centerConfig.subtext, centerX, centerY + 14);
-    }
-    ctx.restore();
-  },
-};
-
-ChartJS.register(centerTextPlugin);
+const ReportPreviewModal = dynamic(() => import("./components/report-preview-modal").then(m => m.ReportPreviewModal));
+const KpiDrilldownModal = dynamic(() => import("./components/kpi-drilldown-modal").then(m => m.KpiDrilldownModal));
+const OperationalInsights = dynamic(() => import("./components/operational-insights").then(m => m.OperationalInsights));
 
 type DashboardData = {
   activity: Activity;
@@ -103,6 +55,10 @@ export default function Home() {
   const [limit, setLimit] = useState("100");
   const [activeTab, setActiveTab] = useState<ActiveTab>("daily");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [view, setView] = useState<"overview" | "operations" | "records">("overview");
+  const [previousPeriod, setPreviousPeriod] = useState<{ from: string; to: string; preset: PresetPeriod } | null>(null);
+  const search = useDeferredValue(searchQuery);
 
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [isLoadingBrands, setIsLoadingBrands] = useState(false);
@@ -175,6 +131,7 @@ export default function Home() {
 
   // Handle Preset selection
   function handlePresetChange(preset: PresetPeriod) {
+    setPreviousPeriod(null);
     setActivePreset(preset);
     if (preset !== "custom") {
       const dates = getPresetDates(preset);
@@ -217,9 +174,6 @@ export default function Home() {
         history: payload.history || [],
       };
       setResult({ key: filterKey, data: nextData });
-      setNotice(
-        `데이터 로드 완료: 일일 ${numberFormat.format(nextData.daily.length)}건 / FAQ ${numberFormat.format(nextData.faqSummary.length)}건 / 미매칭 ${numberFormat.format(nextData.unmatchedQueries.length)}건 / 개선대기열 ${numberFormat.format(nextData.improvementQueue.length)}건 / 채널친구 ${numberFormat.format(nextData.channelFriendSummary.length)}건`,
-      );
     } catch (err) {
       if (signal.aborted) return;
       setResult(null);
@@ -247,11 +201,11 @@ export default function Home() {
 
   const summary = useMemo(() => summarize(data), [data]);
 
-  const visibleUnmatched = filterRows(data?.unmatchedQueries || [], searchQuery, ["brand_name", "sample_query", "menu_id"]);
-  const visibleImprovements = filterRows(data?.improvementQueue || [], searchQuery, ["brand_name", "sample_query", "menu_id", "result_type"]);
+  const visibleUnmatched = filterRows(data?.unmatchedQueries || [], search, ["brand_name", "sample_query", "menu_id"]);
+  const visibleImprovements = filterRows(data?.improvementQueue || [], search, ["brand_name", "sample_query", "menu_id", "result_type"]);
 
   return (
-    <main className="app-shell">
+    <main className="app-shell analysis-shell">
       {/* Top Bar */}
       <TopBar user={currentUser} onLogout={handleLogout} />
 
@@ -267,10 +221,12 @@ export default function Home() {
         isLoadingBrands={isLoadingBrands}
         onPresetChange={handlePresetChange}
         onFromChange={(val) => {
+          setPreviousPeriod(null);
           setFrom(val);
           setActivePreset("custom");
         }}
         onToChange={(val) => {
+          setPreviousPeriod(null);
           setTo(val);
           setActivePreset("custom");
         }}
@@ -302,172 +258,44 @@ export default function Home() {
         </div>
       )}
 
-      {/* Dashboard Section */}
+      {previousPeriod && (
+        <button className="analysis-return" type="button" onClick={() => {
+          setFrom(previousPeriod.from);
+          setTo(previousPeriod.to);
+          setActivePreset(previousPeriod.preset);
+          setPreviousPeriod(null);
+          setView("overview");
+        }}>← 이전 조회 기간으로 돌아가기</button>
+      )}
       {data && data.daily.length > 0 ? (
         <section id="pdfContent">
-          {/* KPI Cards Grid */}
-          <div className="kpi-grid">
-            <KpiCard
-              title="총 대화량"
-              value={numberFormat.format(summary.totalCount)}
-              unit="건"
-              subtext="누적 대화 건수"
-              theme="indigo"
-              percent={100}
-              icon="💬"
-              onClick={() => setDrilldownType("total")}
-            />
-            <KpiCard
-              title="매칭 성공"
-              value={numberFormat.format(summary.matchedCount)}
-              unit="건"
-              subtext="FAQ 자동 응답 성공"
-              theme="blue"
-              percent={summary.matchRate}
-              icon="🎯"
-              onClick={() => setDrilldownType("matched")}
-            />
-            <KpiCard
-              title="매칭 실패"
-              value={numberFormat.format(summary.unmatchedCount)}
-              unit="건"
-              subtext="미매칭 낙오 질문"
-              theme="rose"
-              percent={summary.totalCount ? (summary.unmatchedCount / summary.totalCount) * 100 : 0}
-              icon="⚠️"
-              onClick={() => setDrilldownType("unmatched")}
-            />
-            <KpiCard
-              title="평균 매칭률"
-              value={summary.matchRate.toFixed(1)}
-              unit="%"
-              subtext={summary.matchRate >= 80 ? "목표치 양호 (80%+)" : "FAQ 보강 권장"}
-              theme={summary.matchRate >= 80 ? "emerald" : summary.matchRate >= 60 ? "amber" : "rose"}
-              percent={summary.matchRate}
-              icon="📈"
-              onClick={() => setDrilldownType("rate")}
-            />
-            <KpiCard
-              title="채널 친구 대화"
-              value={numberFormat.format(summary.friendRequests)}
-              unit="건"
-              subtext={`채널 상태 집계의 ${summary.friendRate.toFixed(1)}%`}
-              theme="purple"
-              percent={summary.friendRate}
-              icon="👥"
-              onClick={() => setDrilldownType("friend")}
-            />
-            <KpiCard
-              title="개선 시급 질문"
-              value={numberFormat.format(summary.improvementCount)}
-              unit="건"
-              subtext={`${summary.improvementTypes}종 항목`}
-              theme={summary.improvementCount > 0 ? "amber" : "emerald"}
-              percent={summary.improvementCount > 0 ? Math.min(100, summary.improvementCount * 5) : 0}
-              icon="⚡"
-              onClick={() => setDrilldownType("improvement")}
-            />
-          </div>
-
-          {/* Operational Practitioner Insights */}
-          <OperationalInsights
-            activity={data.activity}
-            unmatchedQueries={data.unmatchedQueries}
-            channelFriendSummary={data.channelFriendSummary}
-            daily={data.daily}
-            brands={scopedBrands}
-            totalCount={summary.totalCount}
-          />
-
-          {/* Charts Row 1: 대화량 추세 & 매칭 현황 도넛 */}
-          <div className="charts-grid">
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>일자별 대화량 추이</h3>
-                  <p>일자별 자동 응답 성공 건과 미매칭 인입량 비교</p>
-                </div>
-              </div>
-              <div className="chart-canvas-box">
-                <Bar data={dailyVolumeChart(data.daily)} options={stackedBarOptions} />
-              </div>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>전체 매칭 현황</h3>
-                  <p>전체 대화 중 성공과 실패 비중</p>
-                </div>
-              </div>
-              <div className="chart-canvas-box">
-                <Doughnut
-                  data={matchDoughnutChart(summary.matchedCount, summary.unmatchedCount)}
-                  options={doughnutOptions(summary.matchRate, summary.totalCount)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Row 2: 매칭률 곡선 & 카카오 친구 도넛 */}
-          <div className="charts-grid">
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>일자별 매칭률 추이 (%)</h3>
-                  <p>안정적 응답 품질 기준(80%) 대비 일자별 추이</p>
-                </div>
-              </div>
-              <div className="chart-canvas-box">
-                <Line data={dailyRateChart(data.daily)} options={smoothLineOptions} />
-              </div>
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>카카오톡 채널 친구 구성</h3>
-                  <p>카카오톡 채널 친구 여부에 따른 문의 유입 비율</p>
-                </div>
-              </div>
-              <div className="chart-canvas-box">
-                <Doughnut
-                  data={channelFriendDoughnutChart(data.channelFriendSummary)}
-                  options={channelFriendDoughnutOptions(summary.friendRate, summary.totalCount)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Row 3: 개선 대기열 TOP 5 & 미매칭 TOP 5 */}
-          <div className="charts-grid">
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>FAQ 개선 대기열 TOP 5</h3>
-                  <p>고객 인입 빈도가 높으나 AI 답변 신뢰도가 낮아 즉시 보강이 필요한 질문</p>
-                </div>
-              </div>
-              <ImprovementRankList rows={data.improvementQueue.slice(0, 5)} />
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title-group">
-                  <h3>상위 미매칭 질문 TOP 5</h3>
-                  <p>기존 FAQ로 처리되지 못해 상담원 확인이 빈번한 상위 문의</p>
-                </div>
-              </div>
-              <UnmatchedRankList rows={data.unmatchedQueries.slice(0, 5)} />
-            </div>
-          </div>
-
+          <nav className="analysis-nav" aria-label="분석 화면">
+            {([["overview", "분석 개요"], ["operations", "운영 진단"], ["records", "상세 데이터"]] as const).map(([id, label]) => (
+              <button type="button" key={id} aria-current={view === id ? "page" : undefined} onClick={() => setView(id)}>{label}</button>
+            ))}
+          </nav>
+          {view === "overview" && <AnalysisOverview
+            daily={data.daily} activity={data.activity} unmatched={data.unmatchedQueries}
+            summary={summary} onMetric={setDrilldownType}
+            onRecords={(query) => { setActiveTab("unmatched"); setSearchQuery(query); setView("records"); }}
+            onDay={day => {
+              if (from !== day || to !== day) setPreviousPeriod({ from, to, preset: activePreset });
+              setFrom(day); setTo(day); setActivePreset("custom");
+              setSearchQuery(""); setActiveTab("unmatched"); setView("records");
+            }}
+          />}
+          {view === "operations" && <OperationalInsights
+            activity={data.activity} unmatchedQueries={data.unmatchedQueries} channelFriendSummary={data.channelFriendSummary}
+            daily={data.daily} brands={scopedBrands} totalCount={summary.totalCount}
+          />}
+          {view === "records" && <>
           {/* Table Controls: Segmented Tabs + Instant Search */}
           <div className="tabs-control-bar">
-            <div className="segmented-tabs" role="tablist">
+            <div className="segmented-tabs" role="group" aria-label="상세 데이터 종류">
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "daily" ? "active" : ""}`}
+                aria-pressed={activeTab === "daily"}
                 onClick={() => setActiveTab("daily")}
               >
                 일별 운영 현황
@@ -476,6 +304,7 @@ export default function Home() {
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "faq" ? "active" : ""}`}
+                aria-pressed={activeTab === "faq"}
                 onClick={() => setActiveTab("faq")}
               >
                 FAQ별 응답 성과
@@ -484,6 +313,7 @@ export default function Home() {
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "unmatched" ? "active" : ""}`}
+                aria-pressed={activeTab === "unmatched"}
                 onClick={() => setActiveTab("unmatched")}
               >
                 미매칭 고객 문의
@@ -492,6 +322,7 @@ export default function Home() {
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "improvement" ? "active" : ""}`}
+                aria-pressed={activeTab === "improvement"}
                 onClick={() => setActiveTab("improvement")}
               >
                 우선 개선 필요 문의
@@ -500,6 +331,7 @@ export default function Home() {
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "channelFriend" ? "active" : ""}`}
+                aria-pressed={activeTab === "channelFriend"}
                 onClick={() => setActiveTab("channelFriend")}
               >
                 채널 친구 유입 분석
@@ -508,6 +340,7 @@ export default function Home() {
               <button
                 type="button"
                 className={`segmented-tab ${activeTab === "history" ? "active" : ""}`}
+                aria-pressed={activeTab === "history"}
                 onClick={() => setActiveTab("history")}
               >
                 상담 대화 원본 로그
@@ -524,14 +357,15 @@ export default function Home() {
               <input
                 type="text"
                 className="table-search-input"
+                aria-label="현재 표 검색"
                 placeholder="현재 탭 데이터 검색..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
-                <span className="search-clear-right" onClick={() => setSearchQuery("")}>
+                <button type="button" aria-label="검색어 지우기" className="search-clear-right" onClick={() => setSearchQuery("")}>
                   ✕
-                </span>
+                </button>
               )}
             </div>
           </div>
@@ -540,14 +374,14 @@ export default function Home() {
           {activeTab === "daily" && (
             <DataTable
               title="일별 챗봇 운영 성과 내역"
-              rows={filterRows(data.daily, searchQuery, ["report_date", "brand_name", "brand"])}
+              rows={filterRows(data.daily, search, ["report_date", "brand_name", "brand"])}
               columns={dailyColumns}
             />
           )}
           {activeTab === "faq" && (
             <DataTable
               title="FAQ별 고객 응답 성과 내역"
-              rows={filterRows(data.faqSummary, searchQuery, ["brand_name", "category_name", "faq_question"])}
+              rows={filterRows(data.faqSummary, search, ["brand_name", "category_name", "faq_question"])}
               columns={faqColumns}
             />
           )}
@@ -648,17 +482,18 @@ export default function Home() {
           {activeTab === "channelFriend" && (
             <DataTable
               title="카카오톡 채널 친구 유입 및 성과 분석"
-              rows={filterRows(data.channelFriendSummary, searchQuery, ["brand_name", "channel_friend_status"])}
+              rows={filterRows(data.channelFriendSummary, search, ["brand_name", "channel_friend_status"])}
               columns={channelFriendColumns}
             />
           )}
           {activeTab === "history" && (
             <DataTable
-              title="실시간 상담 대화 원본 로그"
-              rows={filterRows(data.history, searchQuery, ["brand_name", "query", "faq_question", "category_name"])}
+              title="상담 대화 기록"
+              rows={filterRows(data.history, search, ["brand_name", "query", "faq_question", "category_name"])}
               columns={historyColumns}
             />
           )}
+          </>}
         </section>
       ) : (
         <section className="dashboard-empty">
@@ -682,7 +517,7 @@ export default function Home() {
       )}
 
       {/* C-Level Report Preview & Vector Print Modal */}
-      {data && (
+      {data && isPreviewOpen && (
         <ReportPreviewModal
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
@@ -726,13 +561,10 @@ function TopBar({
         </div>
         <div className="logo-title-group">
           <h1>
-            게이트비전 챗봇 운영 센터
-            <span className="system-badge">
-              <span className="pulse-dot" />
-              Supabase Live
-            </span>
+            챗봇 문의 분석
+
           </h1>
-          <div className="logo-subtitle">등록 브랜드 카카오 챗봇 실시간 분석 및 품질 관리 플랫폼</div>
+          <div className="logo-subtitle">게이트비젼 · 카카오톡 상담 채널</div>
         </div>
       </div>
       <div className="top-bar-meta">
@@ -811,7 +643,7 @@ function FilterPanel({
       <div className="filter-header-row">
         {/* Quick Presets */}
         <div className="preset-group">
-          <span className="preset-title">기간 프리셋:</span>
+          <span className="preset-title">조회 기간</span>
           <button
             type="button"
             className={`preset-btn ${activePreset === "today" ? "active" : ""}`}
@@ -848,7 +680,7 @@ function FilterPanel({
           {isLoading && (
             <div className="filter-sync-indicator" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)", fontWeight: 600, padding: "0 8px" }}>
               <span className="pulse-dot" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#4f46e5", display: "inline-block" }} />
-              실시간 동기화 중...
+              조회 중…
             </div>
           )}
           <button className="btn btn-pdf" type="button" onClick={onExport} disabled={!canExport}>
@@ -867,16 +699,16 @@ function FilterPanel({
       {/* Input Filters Grid */}
       <div className="filter-inputs-grid">
         <div className="input-field">
-          <label>조회 시작일</label>
-          <input type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
+          <label htmlFor="report-start">조회 시작일</label>
+          <input id="report-start" type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
         </div>
         <div className="input-field">
-          <label>조회 종료일</label>
-          <input type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
+          <label htmlFor="report-end">조회 종료일</label>
+          <input id="report-end" type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
         </div>
         <div className="input-field">
-          <label>브랜드 선택</label>
-          <select value={brand} onChange={(e) => onBrandChange(e.target.value)} disabled={isLoadingBrands}>
+          <label htmlFor="report-brand">브랜드 선택</label>
+          <select id="report-brand" value={brand} onChange={(e) => onBrandChange(e.target.value)} disabled={isLoadingBrands}>
             <option value="">전체 브랜드</option>
             {brands.map((b) => (
               <option value={b.brand} key={b.brand}>
@@ -886,8 +718,8 @@ function FilterPanel({
           </select>
         </div>
         <div className="input-field">
-          <label>질문·로그 표시 건수</label>
-          <select value={limit} onChange={(e) => onLimitChange(e.target.value)}>
+          <label htmlFor="report-limit">질문·로그 표시 건수</label>
+          <select id="report-limit" value={limit} onChange={(e) => onLimitChange(e.target.value)}>
             <option value="50">50건</option>
             <option value="100">100건 (권장)</option>
             <option value="200">200건</option>
@@ -896,117 +728,6 @@ function FilterPanel({
         </div>
       </div>
     </section>
-  );
-}
-
-// KPI Card
-function KpiCard({
-  title,
-  value,
-  unit,
-  subtext,
-  theme,
-  percent,
-  icon,
-  onClick,
-}: {
-  title: string;
-  value: string;
-  unit: string;
-  subtext: string;
-  theme: "indigo" | "blue" | "emerald" | "amber" | "rose" | "purple";
-  percent: number;
-  icon: string;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      className={`kpi-card theme-${theme} ${onClick ? "clickable" : ""}`}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (onClick && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-    >
-      <div>
-        <div className="kpi-header">
-          <span className="kpi-title">{title}</span>
-          <span className="kpi-icon-pill">{icon}</span>
-        </div>
-        <div className="kpi-value-row">
-          <span className="kpi-number">{value}</span>
-          <span className="kpi-unit">{unit}</span>
-        </div>
-      </div>
-      <div>
-        <div className="kpi-subtext">{subtext}</div>
-        <div className="kpi-progress">
-          <div className="kpi-progress-bar" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-        </div>
-        {onClick && (
-          <div className="kpi-click-hint">
-            <span>상세 내역 / 엑셀</span>
-            <span>↗</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Ranked List Components
-function ImprovementRankList({ rows }: { rows: ImprovementQueueRow[] }) {
-  if (!rows.length) {
-    return <div className="empty-state-cell">개선 대기열에 등록된 항목이 없습니다.</div>;
-  }
-  return (
-    <div className="rank-list">
-      {rows.map((row, idx) => (
-        <div className="rank-item" key={`${row.brand}-${row.query_key}-${idx}`}>
-          <span className="rank-number">{idx + 1}</span>
-          <div className="rank-content">
-            <div className="rank-primary-text">{row.sample_query}</div>
-            <div className="rank-meta">
-              <span className={`rank-score-pill ${row.result_type === "unmatched" ? "danger" : "warning"}`}>
-                {resultTypeLabel(row.result_type)}
-              </span>
-              <span>{row.brand_name}</span>
-              {row.menu_id && <span>• {supportMenuLabel(row.menu_id)}</span>}
-              {row.avg_score !== null && <span>• 유사도 {row.avg_score.toFixed(1)}점</span>}
-            </div>
-          </div>
-          <span className="rank-count">{row.query_count}회</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function UnmatchedRankList({ rows }: { rows: UnmatchedQueryRow[] }) {
-  if (!rows.length) {
-    return <div className="empty-state-cell">미매칭 질문 데이터가 없습니다.</div>;
-  }
-  return (
-    <div className="rank-list">
-      {rows.map((row, idx) => (
-        <div className="rank-item" key={`${row.brand}-${row.sample_query}-${idx}`}>
-          <span className="rank-number">{idx + 1}</span>
-          <div className="rank-content">
-            <div className="rank-primary-text">{row.sample_query}</div>
-            <div className="rank-meta">
-              <span>{row.brand_name}</span>
-              {row.menu_id && <span>• {supportMenuLabel(row.menu_id)}</span>}
-              <span>• 사용자 {row.unique_user_count}명</span>
-            </div>
-          </div>
-          <span className="rank-count">{row.query_count}회</span>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1124,198 +845,6 @@ function summarize(data: DashboardData | null) {
     friendRate,
     improvementCount,
     improvementTypes,
-  };
-}
-
-// Chart Options & Data Builders
-const stackedBarOptions: ChartOptions<"bar"> = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "top",
-      labels: { font: { family: "Pretendard", weight: 600, size: 12 }, boxWidth: 12, boxHeight: 12, borderRadius: 3, useBorderRadius: true },
-    },
-    tooltip: {
-      backgroundColor: "rgba(15, 23, 42, 0.94)",
-      titleFont: { family: "Pretendard", weight: 700, size: 13 },
-      bodyFont: { family: "Pretendard", size: 12 },
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    x: {
-      stacked: true,
-      grid: { display: false },
-      ticks: { font: { size: 11, family: "Pretendard" }, color: "#64748b" },
-    },
-    y: {
-      stacked: true,
-      grid: { color: "#f1f5f9" },
-      ticks: { font: { size: 11, family: "Pretendard" }, color: "#64748b" },
-    },
-  },
-};
-
-const smoothLineOptions: ChartOptions<"line"> = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "rgba(15, 23, 42, 0.94)",
-      titleFont: { family: "Pretendard", weight: 700, size: 13 },
-      bodyFont: { family: "Pretendard", size: 12 },
-      padding: 12,
-      cornerRadius: 8,
-      callbacks: {
-        label: (ctx) => `매칭률: ${ctx.parsed.y !== null && ctx.parsed.y !== undefined ? ctx.parsed.y.toFixed(1) : 0}%`,
-      },
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 11, family: "Pretendard" }, color: "#64748b" },
-    },
-    y: {
-      min: 0,
-      max: 100,
-      grid: { color: "#f1f5f9" },
-      ticks: {
-        font: { size: 11, family: "Pretendard" },
-        color: "#64748b",
-        callback: (v) => `${v}%`,
-      },
-    },
-  },
-};
-
-function doughnutOptions(matchRate: number, total: number): ChartOptions<"doughnut"> {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "74%",
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: { font: { family: "Pretendard", weight: 600, size: 12 }, boxWidth: 10, boxHeight: 10, borderRadius: 2, useBorderRadius: true },
-      },
-      tooltip: {
-        backgroundColor: "rgba(15, 23, 42, 0.94)",
-        padding: 10,
-        cornerRadius: 8,
-      },
-      ...({
-        centerText: {
-          text: `${matchRate.toFixed(1)}%`,
-          subtext: `총 ${numberFormat.format(total)}건`,
-          color: "#0f172a",
-          subcolor: "#64748b",
-        },
-      } as Record<string, unknown>),
-    },
-  };
-}
-
-function channelFriendDoughnutOptions(friendRate: number, total: number): ChartOptions<"doughnut"> {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "74%",
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: { font: { family: "Pretendard", weight: 600, size: 12 }, boxWidth: 10, boxHeight: 10, borderRadius: 2, useBorderRadius: true },
-      },
-      tooltip: {
-        backgroundColor: "rgba(15, 23, 42, 0.94)",
-        padding: 10,
-        cornerRadius: 8,
-      },
-      ...({
-        centerText: {
-          text: `${friendRate.toFixed(1)}%`,
-          subtext: "친구 대화 비중",
-          color: "#7c3aed",
-          subcolor: "#64748b",
-        },
-      } as Record<string, unknown>),
-    },
-  };
-}
-
-function dailyVolumeChart(rows: ReportRow[]) {
-  const sorted = aggregateDailyByDate(rows);
-  return {
-    labels: sorted.map((r) => shortDate(r.date)),
-    datasets: [
-      {
-        label: "매칭 성공",
-        data: sorted.map((r) => r.matched),
-        backgroundColor: "#4f46e5",
-        borderRadius: 6,
-      },
-      {
-        label: "매칭 실패",
-        data: sorted.map((r) => r.unmatched),
-        backgroundColor: "#f43f5e",
-        borderRadius: 6,
-      },
-    ],
-  };
-}
-
-function matchDoughnutChart(matched: number, unmatched: number) {
-  return {
-    labels: ["매칭 성공", "매칭 실패"],
-    datasets: [
-      {
-        data: [matched, unmatched],
-        backgroundColor: ["#4f46e5", "#f43f5e"],
-        borderWidth: 0,
-        hoverOffset: 4,
-      },
-    ],
-  };
-}
-
-function dailyRateChart(rows: ReportRow[]) {
-  const sorted = aggregateDailyByDate(rows);
-  return {
-    labels: sorted.map((r) => shortDate(r.date)),
-    datasets: [
-      {
-        label: "매칭률 (%)",
-        data: sorted.map((r) => Number((r.total ? 100 * r.matched / r.total : 0).toFixed(1))),
-        borderColor: "#059669",
-        backgroundColor: "rgba(5, 150, 105, 0.08)",
-        borderWidth: 2.5,
-        tension: 0.35,
-        fill: true,
-        pointBackgroundColor: "#059669",
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      },
-    ],
-  };
-}
-
-function channelFriendDoughnutChart(friends: ChannelFriendSummaryRow[]) {
-  const friendCount = friends.filter((f) => f.channel_friend_status === "friend").reduce((s, f) => s + f.total_requests, 0);
-  const otherCount = friends.filter((f) => f.channel_friend_status !== "friend").reduce((s, f) => s + f.total_requests, 0);
-
-  return {
-    labels: ["카카오 채널 친구", "비친구 / 미확인"],
-    datasets: [
-      {
-        data: [friendCount, otherCount],
-        backgroundColor: ["#7c3aed", "#cbd5e1"],
-        borderWidth: 0,
-        hoverOffset: 4,
-      },
-    ],
   };
 }
 

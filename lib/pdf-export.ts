@@ -1,3 +1,4 @@
+export { aggregateDailyByDate } from "./report";
 import { percent, type Activity } from "./period-report";
 import { seoulDate } from "./report-period";
 import type { jsPDF as JsPdfDocument } from "jspdf";
@@ -748,13 +749,6 @@ export function createFriendDonutCanvas(friendCount: number, otherCount: number,
 // -------------------------------------------------------------
 // SVG RENDERING HELPERS
 // -------------------------------------------------------------
-type AggregatedDateRow = {
-  date: string;
-  total: number;
-  matched: number;
-  unmatched: number;
-};
-
 function hourlyDistributionSvg(hours: number[], peakHour: number) {
   const width = 912;
   const height = 180;
@@ -966,22 +960,6 @@ export function formatScore(score?: number | null): string {
   if (score === null || score === undefined) return "-";
   const normalized = score > 100 ? score / 10 : score;
   return `${normalized.toFixed(1)}점`;
-}
-
-export function aggregateDailyByDate(daily: ReportRow[]): AggregatedDateRow[] {
-  const map = new Map<string, { total: number; matched: number; unmatched: number }>();
-  daily.forEach((r) => {
-    const d = r.report_date || "Unknown";
-    const existing = map.get(d) || { total: 0, matched: 0, unmatched: 0 };
-    existing.total += r.total_count || 0;
-    existing.matched += r.matched_count || 0;
-    existing.unmatched += r.unmatched_count || 0;
-    map.set(d, existing);
-  });
-
-  return Array.from(map.entries())
-    .map(([date, counts]) => ({ date, ...counts }))
-    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function el(tag: string, className = "", children: Array<Element | string> = []): HTMLElement {

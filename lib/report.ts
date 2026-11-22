@@ -287,3 +287,27 @@ export function resultTypeLabel(resultType?: string | null): string {
   return resultType || "-";
 }
 
+
+type AggregatedDateRow = {
+  date: string;
+  total: number;
+  matched: number;
+  unmatched: number;
+};
+
+export function aggregateDailyByDate(daily: ReportRow[]): AggregatedDateRow[] {
+  const map = new Map<string, { total: number; matched: number; unmatched: number }>();
+  daily.forEach((r) => {
+    const d = r.report_date || "Unknown";
+    const existing = map.get(d) || { total: 0, matched: 0, unmatched: 0 };
+    existing.total += r.total_count || 0;
+    existing.matched += r.matched_count || 0;
+    existing.unmatched += r.unmatched_count || 0;
+    map.set(d, existing);
+  });
+
+  return Array.from(map.entries())
+    .map(([date, counts]) => ({ date, ...counts }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
