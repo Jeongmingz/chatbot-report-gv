@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "게이트비젼 챗봇 문의 분석",

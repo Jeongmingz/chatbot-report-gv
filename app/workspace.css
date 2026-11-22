@@ -1,0 +1,127 @@
+.workspace, .login-container {
+  --ws-ink: #17342e;
+  --ws-muted: #52695f;
+  --ws-accent: #18674f;
+  --ws-line: #d7e2da;
+  --brand: #18674f;
+  --brand-hover: #10513e;
+  --brand-gradient: linear-gradient(120deg, #216d55, #175440);
+  font-family: Inter, "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+}
+.workspace-wordmark { font-size: 15px; font-weight: 780; letter-spacing: .12em; }
+.workspace-mark { width: 22px; height: 24px; border: 3px solid #a9dfbf; border-right-width: 8px; border-radius: 8px 2px 8px 2px; transform: skew(-5deg); }
+.skip-content { position: fixed; left: 12px; top: -100px; z-index: 100; background: white; padding: 12px; color: #133c30; }
+.skip-content:focus { top: 12px; }
+@media screen {
+  .app-shell.workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); max-width: none; padding: 0; min-height: 100dvh; background: #f4f7f3; }
+  .workspace-rail { position: sticky; top: 0; height: 100dvh; padding: 30px 15px; color: white; background: #16392f; align-self: start; }
+  .workspace-brand { display: flex; align-items: center; gap: 9px; padding: 0 7px; }
+  .workspace-product { color: #c0d9ca; font-size: 12px; margin: 11px 7px 30px; }
+  .workspace-nav { display: grid; gap: 6px; }
+  .workspace-nav button { padding: 13px 12px; display: flex; align-items: center; gap: 11px; border-radius: 8px; text-align: left; color: #cce2d6; font-size: 14px; font-weight: 610; }
+  .workspace-nav button:hover { background: #224a3f; }
+  .workspace-nav button[aria-current] { background: #d6edda; color: #164534; }
+  .workspace-body { width: 100%; max-width: 1500px; margin: 0 auto; min-width: 0; padding: clamp(20px,3.3vw,52px); }
+  .workspace .top-bar { margin-bottom: 18px; }
+  .workspace .logo-title-group h1 { color: var(--ws-ink); font-size: clamp(25px,3vw,38px); line-height: 1.2; }
+  .workspace .logo-subtitle { margin-top: 6px; color: var(--ws-muted); }
+  .workspace .filter-card { border-radius: 14px; padding: 14px 18px; margin-bottom: 20px; }
+  .workspace .filter-header-row { padding-bottom: 10px; border-color: var(--ws-line); }
+  .workspace .preset-btn { border-radius: 7px; min-height: 35px; }
+  .workspace .btn-pdf { box-shadow: none; border-radius: 8px; }
+  .workspace .filter-inputs-grid { margin-top: 10px; }
+  .workspace-filters summary { cursor: pointer; padding-top: 9px; color: var(--ws-muted); font-size: 12px; }
+  .workspace-filters summary strong { color: var(--ws-ink); font-size: 13px; margin: 0 10px 0 4px; }
+  .workspace .analysis-return { margin-bottom: 12px; }
+  .workspace .operational-insights-container { background: transparent; border: 0; box-shadow: none; padding: 0; }
+  .workspace :is(.segmented-tabs,.insight-tabs-bar) { display: flex; flex-wrap: wrap; flex: 1 1 auto; gap: 5px; overflow: visible; background: transparent; padding: 0; }
+  .workspace :is(.segmented-tab,.insight-tab-btn) { white-space: nowrap; background: white; border: 1px solid var(--ws-line); border-radius: 8px; color: var(--ws-muted); padding: 8px 11px; font-weight: 650; }
+  .workspace :is(.segmented-tab,.insight-tab-btn).active { background: #e1eee3; color: #164c39; border-color: #89ae96; box-shadow: none; }
+  .workspace .tabs-control-bar { display: flex; flex-wrap: wrap; gap: 10px; }
+  .workspace .table-search-box { max-width: 100%; }
+  .workspace .data-table-card, .workspace .insight-card, .workspace .brand-benchmark-card { border: 1px solid var(--ws-line); box-shadow: none; border-radius: 14px; }
+  .workspace .data-table-header { flex-wrap: wrap; gap: 10px; }
+  .workspace .data-table-scroll, .workspace .drilldown-table-container, .workspace .benchmark-table-wrapper { overflow: auto; overscroll-behavior-inline: contain; }
+  .workspace .data-table th { background: #edf4ee; color: #385748; }
+  .table-pages { padding: 12px 16px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--ws-line); font-size: 12px; }
+  .table-pages span { margin-right: auto; color: var(--ws-muted); }
+  .table-pages button, .preview-fit { border: 1px solid var(--ws-line); border-radius: 7px; background: white; color: var(--ws-ink); padding: 7px 12px; }
+  .table-pages button:disabled { opacity: .45; cursor: default; }
+  .workspace .drilldown-modal-dialog { border-radius: 16px; max-height: 92dvh; }
+  .workspace .drilldown-modal-header, .workspace .pdf-preview-header { background: #f7faf6; color: var(--ws-ink); }
+  .workspace .btn-preview-print, .workspace .btn-preview-direct, .workspace .btn-drilldown-excel { background: var(--ws-accent); color: white; border: 0; box-shadow: none; }
+  .workspace .btn-preview-print { background: white; color: var(--ws-ink); border: 1px solid var(--ws-line); }
+  .preview-fit[aria-pressed=true] { background: #e0efe3; border-color: #88aa99; }
+  .workspace .pdf-preview-actions { flex-wrap: wrap; align-items: center; gap: 6px; }
+  .workspace .pdf-preview-scroll-area { display: block; overflow: auto; padding: 18px; min-height: 0; }
+  .workspace .pdf-preview-pages-wrapper { width: max-content; margin-inline: auto; }
+  .export-error { padding: 10px 14px; background: #fff0ee; color: #963128; }
+  .login-container { padding: clamp(16px,4vw,58px); background: #f2f6f1; min-height: 100dvh; }
+  .login-layout { width: min(100%, 930px); display: grid; grid-template-columns: .98fr 1.02fr; border: 1px solid var(--ws-line); background: white; border-radius: 21px; overflow: hidden; box-shadow: 0 20px 70px #1c493312; }
+  .login-identity { position: relative; overflow: hidden; padding: clamp(26px,4.5vw,56px); background: #173e32; color: #fff; isolation: isolate; }
+  .login-identity h1 { font-size: clamp(26px,3.4vw,43px); letter-spacing: -.065em; margin: 54px 0 12px; }
+  .login-identity p { color: #c7dfd0; font-size: 15px; max-width: 28ch; line-height: 1.8; word-break: keep-all; }
+  .login-art { position: absolute; bottom: -55px; right: -30px; width: 235px; height: 190px; transform: rotate(-17deg); z-index: -1; }
+  .login-art i { position: absolute; inset: 0; border: 1px solid #78a990; border-radius: 36px 36px 36px 3px; }
+  .login-art i:nth-child(2) { translate: 22px -17px; }
+  .login-art i:nth-child(3) { translate: 44px -34px; }
+  .login-layout .login-card { background: white; max-width: none; border: 0; border-radius: 0; box-shadow: none; padding: clamp(26px,4.5vw,54px); animation: none; }
+  .login-layout .login-header { text-align: left; margin-bottom: 24px; }
+  .login-layout .login-title { font-size: 24px; color: var(--ws-ink); letter-spacing: -.05em; }
+  .login-layout .login-subtitle, .login-layout .info-desc { color: var(--ws-muted); }
+  .login-layout .login-info-card { background: #f0f6f0; border-color: var(--ws-line); }
+  .login-layout .info-title { color: var(--ws-ink); }
+  .login-layout .login-submit-btn { background: var(--ws-accent); box-shadow: none; min-height: 46px; }
+  .password-field { position: relative; }
+  .password-field input { padding-right: 66px; }
+  .password-field button { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 8px; font-size: 13px; color: var(--ws-accent); font-weight: 650; }
+  :is(.login-layout,.workspace) :is(summary,button,input,select,[tabindex]):focus-visible { outline: 3px solid #3878aa; outline-offset: 2px; }
+  .workspace .chip-color.peak { background: #17634f; }
+  .workspace .chip-color.day { background: #64a58a; }
+}
+@media screen and (max-width: 980px) {
+  .app-shell.workspace { grid-template-columns: minmax(0,1fr); align-content: start; }
+  .workspace-rail { position: static; height: auto; display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; gap: 12px; }
+  .workspace-product { display: none; }
+  .workspace-nav { display: flex; }
+  .workspace-nav button { padding: 9px; }
+}
+@media screen and (max-width: 640px) {
+  .workspace-body { padding: 16px 12px 36px; }
+  .workspace-rail { flex-direction: column; align-items: stretch; padding: 12px; }
+  .workspace-brand { justify-content: center; }
+  .workspace-nav { display: grid; grid-template-columns: repeat(3,1fr); }
+  .workspace-nav button { justify-content: center; min-height: 44px; gap: 6px; font-size: 13px; }
+  .workspace .top-bar { flex-wrap: wrap; gap: 10px; }
+  .workspace .top-bar-meta { display: flex; }
+  .workspace .top-bar-user-badge .user-meta-sub { display: none; }
+  .workspace .logout-btn { min-height: 40px; }
+  .workspace .filter-header-row { align-items: flex-start; }
+  .workspace .preset-group { flex-wrap: wrap; }
+  .workspace .filter-card { padding: 12px; }
+  .workspace .preset-title { display: none; }
+  .workspace .filter-inputs-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .workspace .filter-inputs-grid :is(input,select) { min-width: 0; width: 100%; }
+  .workspace :is(.table-search-box, .drilldown-search-wrapper) { width: 100%; }
+  .workspace .drilldown-modal-backdrop { padding: 0; }
+  .workspace .drilldown-modal-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .workspace :is(.drilldown-modal-header,.drilldown-modal-toolbar,.pdf-preview-header) { flex-wrap: wrap; align-items: flex-start; padding: 12px; gap: 10px; }
+  .workspace .drilldown-table-container { flex: 1; min-height: 0; }
+  .workspace .drilldown-modal-footer { padding: 10px; }
+  .workspace .pdf-preview-scroll-area { padding: 8px; }
+  .workspace .pdf-preview-actions button { padding: 8px 10px; font-size: 13px; min-height: 40px; }
+  .workspace :is(.operational-grid,.filter-inputs-grid,.chart-card,.insight-card) { min-width: 0; }
+  .login-layout { grid-template-columns: 1fr; max-width: 440px; }
+  .login-identity { padding: 22px 26px; }
+  .login-identity h1 { margin: 14px 0 4px; }
+  .login-identity p { max-width: 32ch; font-size: 13px; }
+  .login-art { opacity: .3; right: -155px; }
+}
+@media print {
+  body:has(.pdf-preview-modal-root) { overflow: visible !important; }
+  .pdf-preview-pages-wrapper { zoom: 1 !important; }
+  .export-error { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.workspace, .login-container) *, :is(.workspace, .login-container) *::before { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

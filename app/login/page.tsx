@@ -9,6 +9,7 @@ function LoginForm() {
   const urlError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
+  const [visible, setVisible] = useState(false);
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState(() => {
     if (urlError === "unauthorized_service") {
@@ -32,7 +33,7 @@ function LoginForm() {
         const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email: email.trim(), password }),
         });
 
         const data = await res.json();
@@ -53,34 +54,10 @@ function LoginForm() {
 
   return (
     <div className="login-card">
-      {/* Brand Header */}
-      <div className="login-header">
-        <div className="login-logo-box">
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <h1 className="login-title">게이트비전 챗봇 운영 센터</h1>
-        <p className="login-subtitle">
-          Enterprise Chatbot Analytics & Quality Operations
-        </p>
-        <div className="login-badge-wrap">
-          <span className="login-badge">
-            <span className="login-badge-dot" />
-            사내 전용 보안 시스템
-          </span>
-        </div>
-      </div>
-
+      <header className="login-header">
+        <h2 className="login-title">사내 계정 로그인</h2>
+        <p className="login-subtitle">등록된 이메일과 비밀번호를 입력하세요.</p>
+      </header>
       {/* Error Alert */}
       {errorMessage && (
         <div className="login-error-alert" role="alert">
@@ -118,16 +95,16 @@ function LoginForm() {
 
         <div className="form-group">
           <label htmlFor="password">비밀번호</label>
-          <input
+          <div className="password-field"><input
             id="password"
-            type="password"
+            type={visible ? "text" : "password"}
             autoComplete="current-password"
             placeholder="••••••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isPending}
             required
-          />
+          /><button type="button" aria-controls="password" aria-label="비밀번호 표시" aria-pressed={visible} onClick={() => setVisible(value => !value)}>{visible ? "숨기기" : "표시"}</button></div>
         </div>
 
         <button
@@ -149,9 +126,9 @@ function LoginForm() {
       {/* Guidance Footer */}
       <div className="login-footer">
         <div className="login-info-card">
-          <p className="info-title">💡 계정 및 접근 권한 안내</p>
+          <p className="info-title">접근 권한 문의</p>
           <p className="info-desc">
-            * 신규 계정 발급 및 접근 권한 문의는 <strong>영업 4팀 이정민</strong>에게 요청하세요.
+            계정 발급과 권한 변경은 <strong>영업 4팀 이정민</strong>에게 요청하세요.
           </p>
         </div>
       </div>
@@ -161,10 +138,18 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="login-container">
+    <main className="login-container">
+      <div className="login-layout">
+      <section className="login-identity">
+        <span className="workspace-wordmark">GATEVISION</span>
+        <h1>챗봇 문의 분석</h1>
+        <p>브랜드별 고객 질문과 FAQ 응답 현황을 확인하는 사내 운영 대시보드입니다.</p>
+        <div className="login-art" aria-hidden="true"><i /><i /><i /></div>
+      </section>
       <Suspense fallback={<div className="login-card" style={{ minHeight: "420px" }} />}>
         <LoginForm />
       </Suspense>
-    </div>
+      </div>
+    </main>
   );
 }

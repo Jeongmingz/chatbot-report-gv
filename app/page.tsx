@@ -45,6 +45,12 @@ type BrandOption = {
   brand_name: string;
 };
 
+const screens = [
+  { id: "overview", label: "분석 개요", path: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z" },
+  { id: "operations", label: "운영 진단", path: "M2 12h5l3-7 4 14 3-7h5" },
+  { id: "records", label: "상세 데이터", path: "M3 4h18v16H3z M3 10h18 M9 10v10" },
+] as const;
+
 const numberFormat = new Intl.NumberFormat("ko-KR");
 
 export default function Home() {
@@ -205,9 +211,21 @@ export default function Home() {
   const visibleImprovements = filterRows(data?.improvementQueue || [], search, ["brand_name", "sample_query", "menu_id", "result_type"]);
 
   return (
-    <main className="app-shell analysis-shell">
+    <div className="app-shell analysis-shell workspace">
+      <a href="#workspace-content" className="skip-content">본문으로 이동</a>
+      <aside className="workspace-rail">
+        <div className="workspace-brand"><span className="workspace-mark" aria-hidden="true" /><span className="workspace-wordmark">GATEVISION</span></div>
+        <div className="workspace-product">챗봇 문의 분석</div>
+        <nav aria-label="분석 화면" className="workspace-nav">
+          {screens.map(screen => <button type="button" key={screen.id} aria-current={view === screen.id ? "page" : undefined} onClick={() => setView(screen.id)}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d={screen.path} /></svg>
+            {screen.label}
+          </button>)}
+        </nav>
+      </aside>
+      <main className="workspace-body" id="workspace-content" tabIndex={-1}>
       {/* Top Bar */}
-      <TopBar user={currentUser} onLogout={handleLogout} />
+      <TopBar title={screens.find(screen => screen.id === view)!.label} user={currentUser} onLogout={handleLogout} />
 
       {/* Filter Control Panel */}
       <FilterPanel
@@ -238,7 +256,7 @@ export default function Home() {
 
       {/* Error & Toast Banners */}
       {error && (
-        <div className="alert-box alert-error">
+        <div className="alert-box alert-error" role="alert">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
@@ -250,7 +268,7 @@ export default function Home() {
       )}
 
       {notice && (
-        <div className="toast-notice">
+        <div className="toast-notice" role="status">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -269,11 +287,6 @@ export default function Home() {
       )}
       {data && data.daily.length > 0 ? (
         <section id="pdfContent">
-          <nav className="analysis-nav" aria-label="분석 화면">
-            {([["overview", "분석 개요"], ["operations", "운영 진단"], ["records", "상세 데이터"]] as const).map(([id, label]) => (
-              <button type="button" key={id} aria-current={view === id ? "page" : undefined} onClick={() => setView(id)}>{label}</button>
-            ))}
-          </nav>
           {view === "overview" && <AnalysisOverview
             daily={data.daily} activity={data.activity} unmatched={data.unmatchedQueries}
             summary={summary} onMetric={setDrilldownType}
@@ -372,21 +385,21 @@ export default function Home() {
 
           {/* Active Data Table */}
           {activeTab === "daily" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="일별 챗봇 운영 성과 내역"
               rows={filterRows(data.daily, search, ["report_date", "brand_name", "brand"])}
               columns={dailyColumns}
             />
           )}
           {activeTab === "faq" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="FAQ별 고객 응답 성과 내역"
               rows={filterRows(data.faqSummary, search, ["brand_name", "category_name", "faq_question"])}
               columns={faqColumns}
             />
           )}
           {activeTab === "unmatched" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="미매칭 고객 문의 상세 내역"
               rows={visibleUnmatched}
               columns={unmatchedColumns}
@@ -433,7 +446,7 @@ export default function Home() {
             />
           )}
           {activeTab === "improvement" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="우선 보강 필요 질문 대기열"
               rows={visibleImprovements}
               columns={improvementColumns}
@@ -480,14 +493,14 @@ export default function Home() {
             />
           )}
           {activeTab === "channelFriend" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="카카오톡 채널 친구 유입 및 성과 분석"
               rows={filterRows(data.channelFriendSummary, search, ["brand_name", "channel_friend_status"])}
               columns={channelFriendColumns}
             />
           )}
           {activeTab === "history" && (
-            <DataTable
+            <DataTable key={activeTab + search}
               title="상담 대화 기록"
               rows={filterRows(data.history, search, ["brand_name", "query", "faq_question", "category_name"])}
               columns={historyColumns}
@@ -496,11 +509,13 @@ export default function Home() {
           </>}
         </section>
       ) : (
-        <section className="dashboard-empty">
-          <div className="dashboard-empty-icon">📊</div>
+        <section className="dashboard-empty" role="status">
           <h2>{error ? "조회 상태를 확인해 주세요." : data ? "선택 기간의 상담 기록이 없습니다." : "리포트를 조회하고 있습니다."}</h2>
+          {data && !data.daily.length && <p>조회 기간이나 브랜드를 바꿔 다시 확인하세요.</p>}
         </section>
       )}
+
+      </main>
 
       {/* KPI Drilldown Detail & Excel Export Modal */}
       {data && drilldownType && (
@@ -539,32 +554,26 @@ export default function Home() {
           }}
         />
       )}
-    </main>
+    </div>
   );
 }
 
 // Top Bar Component
 function TopBar({
+  title,
   user,
   onLogout,
 }: {
+  title: string;
   user: { name: string; role: string; team: string; title: string; email: string } | null;
   onLogout: () => void;
 }) {
   return (
     <header className="top-bar">
       <div className="logo-area">
-        <div className="logo-icon-box">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
         <div className="logo-title-group">
-          <h1>
-            챗봇 문의 분석
-
-          </h1>
-          <div className="logo-subtitle">게이트비젼 · 카카오톡 상담 채널</div>
+          <h1>{title}</h1>
+          <div className="logo-subtitle">카카오톡 상담 채널</div>
         </div>
       </div>
       <div className="top-bar-meta">
@@ -647,6 +656,7 @@ function FilterPanel({
           <button
             type="button"
             className={`preset-btn ${activePreset === "today" ? "active" : ""}`}
+            aria-pressed={activePreset === "today"}
             onClick={() => onPresetChange("today")}
           >
             오늘
@@ -654,6 +664,7 @@ function FilterPanel({
           <button
             type="button"
             className={`preset-btn ${activePreset === "7d" ? "active" : ""}`}
+            aria-pressed={activePreset === "7d"}
             onClick={() => onPresetChange("7d")}
           >
             최근 7일
@@ -661,6 +672,7 @@ function FilterPanel({
           <button
             type="button"
             className={`preset-btn ${activePreset === "30d" ? "active" : ""}`}
+            aria-pressed={activePreset === "30d"}
             onClick={() => onPresetChange("30d")}
           >
             최근 30일
@@ -668,6 +680,7 @@ function FilterPanel({
           <button
             type="button"
             className={`preset-btn ${activePreset === "month" ? "active" : ""}`}
+            aria-pressed={activePreset === "month"}
             onClick={() => onPresetChange("month")}
           >
             이번 달
@@ -697,14 +710,16 @@ function FilterPanel({
       </div>
 
       {/* Input Filters Grid */}
-      <div className="filter-inputs-grid">
+      <details className="workspace-filters">
+        <summary><strong>조회 조건</strong><span>{brands.find(item => item.brand === brand)?.brand_name || brand || "전체 브랜드"} · {from || "처음"} ~ {to || "현재"}</span></summary>
+        <div className="filter-inputs-grid">
         <div className="input-field">
           <label htmlFor="report-start">조회 시작일</label>
-          <input id="report-start" type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
+          <input id="report-start" type="date" max={to || undefined} value={from} onChange={(e) => onFromChange(e.target.value)} />
         </div>
         <div className="input-field">
           <label htmlFor="report-end">조회 종료일</label>
-          <input id="report-end" type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
+          <input id="report-end" type="date" min={from || undefined} value={to} onChange={(e) => onToChange(e.target.value)} />
         </div>
         <div className="input-field">
           <label htmlFor="report-brand">브랜드 선택</label>
@@ -726,7 +741,8 @@ function FilterPanel({
             <option value="500">500건</option>
           </select>
         </div>
-      </div>
+        </div>
+      </details>
     </section>
   );
 }
@@ -749,6 +765,12 @@ function DataTable<T extends Record<string, unknown>>({
   columns: Array<Column<T>>;
   headerActions?: React.ReactNode;
 }) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const perPage = 20;
+  const pages = Math.max(1, Math.ceil(rows.length / perPage));
+  const page = Math.min(requestedPage, pages);
+  const offset = (page - 1) * perPage;
+
   return (
     <div className="data-table-card">
       <div className="data-table-header">
@@ -758,18 +780,18 @@ function DataTable<T extends Record<string, unknown>>({
         </h4>
         {headerActions && <div className="table-action-header-tools">{headerActions}</div>}
       </div>
-      <div className="data-table-scroll">
-        <table className="data-table">
+      <div className="data-table-scroll" role="region" tabIndex={0} aria-label={title}>
+        <table className="data-table" aria-label={title}>
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={String(c.key)}>{c.label}</th>
+                <th scope="col" key={String(c.key)}>{c.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.length > 0 ? (
-              rows.map((row, rIdx) => (
+              rows.slice(offset, offset + perPage).map((row, rIdx) => (
                 <tr key={rIdx}>
                   {columns.map((c) => (
                     <td key={String(c.key)}>{c.render ? c.render(row) : formatCell(row[c.key])}</td>
@@ -786,6 +808,12 @@ function DataTable<T extends Record<string, unknown>>({
           </tbody>
         </table>
       </div>
+      {pages > 1 && <nav className="table-pages" aria-label="표 페이지">
+        <span aria-live="polite">{numberFormat.format(offset + 1)}–{numberFormat.format(Math.min(offset + perPage, rows.length))} / {numberFormat.format(rows.length)}건</span>
+        <button type="button" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>이전</button>
+        <b>{page} / {pages}</b>
+        <button type="button" disabled={page === pages} onClick={() => setRequestedPage(page + 1)}>다음</button>
+      </nav>}
     </div>
   );
 }

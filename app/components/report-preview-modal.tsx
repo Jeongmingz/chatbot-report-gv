@@ -1,10 +1,12 @@
 "use client";
 
+import { useDialogFocus } from "./use-dialog-focus";
 import { seoulDate } from "@/lib/report-period";
 import { useEffect, useRef, useState } from "react";
 import {
   buildReportPdfPages,
   exportDashboardPdf,
+  PDF_WIDTH_PX,
   type PdfReportInput,
 } from "@/lib/pdf-export";
 import { recordDownloadAudit } from "@/lib/audit";
@@ -16,8 +18,23 @@ interface ReportPreviewModalProps {
 }
 
 export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewModalProps) {
+  const dialog = useDialogFocus(isOpen, onClose);
+  const [downloadError, setDownloadError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const [isExportingDirect, setIsExportingDirect] = useState(false);
+
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(true);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!isOpen || !viewport) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setScale(Math.min(1, entry.contentRect.width / PDF_WIDTH_PX));
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   // Render the 6 pages into the container DOM when opened
   useEffect(() => {
@@ -53,6 +70,7 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
 
   const handleDirectDownload = async () => {
     if (!containerRef.current) return;
+    setDownloadError("");
     setIsExportingDirect(true);
     try {
       const today = seoulDate();
@@ -69,14 +87,14 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
         page_path: "/report",
       });
     } catch (err) {
-      alert(`PDF 다운로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+      setDownloadError(`PDF 다운로드 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsExportingDirect(false);
     }
   };
 
   return (
-    <div className="pdf-preview-modal-root" role="dialog" aria-modal="true">
+    <div className="pdf-preview-modal-root" role="dialog" aria-modal="true" ref={dialog} tabIndex={-1} aria-labelledby="pdf-preview-title">
       {/* Floating Control Toolbar (Hidden in Print) */}
       <header className="pdf-preview-header">
         <div className="pdf-preview-header-left">
@@ -90,23 +108,15 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
             </svg>
           </div>
           <div>
-            <h1 className="pdf-preview-title">게이트비전 챗봇 운영 종합 보고서</h1>
+            <h2 className="pdf-preview-title" id="pdf-preview-title">운영 보고서 미리보기</h2>
             <p className="pdf-preview-sub">
-              {report.filters.brandLabel} • 조회기간: {report.filters.from} ~ {report.filters.to} (총 6페이지)
+              {report.filters.brandLabel} • 조회기간: {report.filters.from || "처음"} ~ {report.filters.to || "현재"} (총 6페이지)
             </p>
           </div>
         </div>
 
-        <div className="pdf-preview-tip-box">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <span>인쇄 창에서 <strong>&apos;대상: PDF로 저장&apos;</strong>을 선택하시면 초고화질 벡터 PDF로 다운로드됩니다.</span>
-        </div>
-
         <div className="pdf-preview-actions">
+          <button className="preview-fit" type="button" aria-pressed={fit} onClick={() => setFit(!fit)}>폭 맞춤</button>
           <button
             type="button"
             className="btn-preview-print"
@@ -118,7 +128,7 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />
             </svg>
-            <span>🖨️ PDF로 저장 / 인쇄</span>
+            <span>인쇄</span>
           </button>
 
           <button
@@ -133,14 +143,14 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            <span>{isExportingDirect ? "PDF 생성 중..." : "📥 1클릭 파일 다운로드"}</span>
+            <span>{isExportingDirect ? "PDF 생성 중..." : "PDF 저장"}</span>
           </button>
 
           <button
             type="button"
             className="btn-preview-close"
             onClick={onClose}
-            aria-label="닫기"
+            data-dialog-initial aria-label="미리보기 닫기"
           >
             ✕ 닫기
           </button>
@@ -148,9 +158,10 @@ export function ReportPreviewModal({ isOpen, onClose, report }: ReportPreviewMod
       </header>
 
       {/* Main Scroll Area Containing the 6 A4 Sheets */}
-      <main className="pdf-preview-scroll-area">
-        <div className="pdf-preview-pages-wrapper" ref={containerRef} id="printReportContainer" />
-      </main>
+      {downloadError && <div className="export-error" role="alert">{downloadError}</div>}
+      <div ref={viewportRef} className="pdf-preview-scroll-area" role="region" aria-label="보고서 본문" tabIndex={0}>
+        <div className="pdf-preview-pages-wrapper" ref={containerRef} style={{ zoom: fit ? scale : 1 }} id="printReportContainer" />
+      </div>
     </div>
   );
 }

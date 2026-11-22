@@ -1,7 +1,8 @@
 "use client";
 
+import { useDialogFocus } from "./use-dialog-focus";
 import { seoulDate } from "@/lib/report-period";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   supportMenuLabel,
   channelFriendStatusLabel,
@@ -48,15 +49,7 @@ export function KpiDrilldownModal({
 }: KpiDrilldownModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  const dialog = useDialogFocus(isOpen, onClose);
 
   // Modal configuration based on drill-down type
   const config = useMemo(() => {
@@ -503,7 +496,7 @@ export function KpiDrilldownModal({
   if (!isOpen || !config) return null;
 
   return (
-    <div className="drilldown-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="drilldown-modal-backdrop" ref={dialog} tabIndex={-1} aria-labelledby="kpi-detail-title" onClick={onClose} role="dialog" aria-modal="true">
       <div className="drilldown-modal-dialog" onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <header className="drilldown-modal-header">
@@ -512,7 +505,7 @@ export function KpiDrilldownModal({
               <span>{config.icon}</span>
             </div>
             <div>
-              <h2 className="drilldown-modal-title">{config.title}</h2>
+              <h2 id="kpi-detail-title" className="drilldown-modal-title">{config.title}</h2>
               <p className="drilldown-modal-subtitle">
                 {brandLabel} • 조회기간: {from || "전체"} ~ {to || "전체"} (조회 목록 {numberFormat.format(totalCount)}건)
               </p>
@@ -531,7 +524,7 @@ export function KpiDrilldownModal({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>📥 엑셀 다운로드</span>
+              <span>CSV 저장</span>
             </button>
             <button
               type="button"
@@ -554,15 +547,15 @@ export function KpiDrilldownModal({
             </svg>
             <input
               type="text"
-              className="table-search-input"
+              className="table-search-input" data-dialog-initial aria-label="상세 결과 내 검색"
               placeholder="결과 내 검색 (고객 질문, 브랜드, 메뉴 등)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <span className="search-clear-right" onClick={() => setSearchQuery("")}>
+              <button type="button" aria-label="상세 검색어 지우기" className="search-clear-right" onClick={() => setSearchQuery("")}>
                 ✕
-              </span>
+              </button>
             )}
           </div>
         </div>
@@ -584,10 +577,10 @@ export function KpiDrilldownModal({
         <footer className="drilldown-modal-footer">
           <div className="drilldown-footer-info">
             <span>표시 중인 데이터: <strong>{numberFormat.format(filteredRows.length)}</strong>건 / 전체 <strong>{numberFormat.format(totalCount)}</strong>건</span>
-            <span style={{ color: "#94a3b8" }}>• Microsoft Excel 호환 (UTF-8 with BOM 적용)</span>
+
           </div>
           <button type="button" className="btn btn-primary-close" onClick={onClose}>
-            확인 및 닫기
+            닫기
           </button>
         </footer>
       </div>

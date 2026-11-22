@@ -109,7 +109,7 @@ export function OperationalInsights({
       {
         data: activity.hours,
         backgroundColor: activity.hours.map((_, i) =>
-          i === peakHour ? "#4f46e5" : i >= 9 && i < 18 ? "#818cf8" : "#cbd5e1"
+          i === peakHour ? "#17634f" : i >= 9 && i < 18 ? "#64a58a" : "#cbd5d1"
         ),
         borderRadius: 4,
         borderSkipped: false,
@@ -119,57 +119,11 @@ export function OperationalInsights({
 
   return (
     <section className="operational-insights-container">
-      {/* Section Header */}
-      <div className="insights-section-header">
-        <div className="insights-header-title-box">
-          <div className="insights-badge">실무자 종합 운영 인사이트 (CS & Operations)</div>
-          <h2 className="insights-main-title">CS 실무자 및 브랜드 총괄을 위한 운영 분석</h2>
-          <p className="insights-subtext">
-            상담원 언급 비중, 요일별·시간대 집중도, 불만 징후와 실제 브랜드별 응답 상태를 함께 확인합니다.
-          </p>
-        </div>
-        <div className="insights-meta-pill">
-          <span>💡 선택 기간의 실제 상담 데이터 반영</span>
-        </div>
-      </div>
-
-      {/* Insight Navigation Segmented Tabs */}
-      <div className="insight-tabs-bar">
-        <button
-          type="button"
-          className={`insight-tab-btn ${activeInsightTab === "deflection" ? "active" : ""}`}
-          onClick={() => setActiveInsightTab("deflection")}
-        >
-          고객 문의 행동
-        </button>
-        <button
-          type="button"
-          className={`insight-tab-btn ${activeInsightTab === "temporal" ? "active" : ""}`}
-          onClick={() => setActiveInsightTab("temporal")}
-        >
-          ⏰ 요일 & 24시간 피크타임
-        </button>
-        <button
-          type="button"
-          className={`insight-tab-btn ${activeInsightTab === "category" ? "active" : ""}`}
-          onClick={() => setActiveInsightTab("category")}
-        >
-          📋 문의 유형 & 질문 형태 분석
-        </button>
-        <button
-          type="button"
-          className={`insight-tab-btn ${activeInsightTab === "risk" ? "active" : ""}`}
-          onClick={() => setActiveInsightTab("risk")}
-        >
-          🚨 불만 징후 & 이탈 지점 레이더
-        </button>
-        <button
-          type="button"
-          className={`insight-tab-btn ${activeInsightTab === "brands" ? "active" : ""}`}
-          onClick={() => setActiveInsightTab("brands")}
-        >
-          🏆 브랜드별 응답 건강도
-        </button>
+      <div className="insight-tabs-bar" role="group" aria-label="운영 진단 주제">
+        {([["deflection", "고객 문의 행동"], ["temporal", "요일·시간대"], ["category", "질문 유형"], ["risk", "불만 징후"], ["brands", "브랜드 비교"]] as const).map(([id, label]) => (
+          <button type="button" key={id} className={`insight-tab-btn ${activeInsightTab === id ? "active" : ""}`}
+            aria-pressed={activeInsightTab === id} onClick={() => setActiveInsightTab(id)}>{label}</button>
+        ))}
       </div>
 
       {activeInsightTab === "deflection" && (
@@ -382,8 +336,8 @@ export function OperationalInsights({
               <div className="insight-card-header">
                 <div className="insight-card-icon theme-rose">🚨</div>
                 <div className="insight-card-title-group">
-                  <h3>고객 불만 & 클레임 위험 징후 레이더 (Risk Radar)</h3>
-                  <p>고장, 파손, 환불, 고발 등 즉각적인 조치가 필요한 긴급 질문</p>
+                  <h3>불만 관련 키워드가 포함된 질문</h3>
+                  <p>고장·파손·환불 등의 표현을 기준으로 집계합니다.</p>
                 </div>
               </div>
 
